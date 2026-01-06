@@ -8,49 +8,54 @@ namespace Documenter
 {
     public class GeminiAgent
     {
-        // !!! PASTE YOUR GOOGLE API KEY BELOW !!!
+        // !!! PASTE YOUR NEW KEY HERE !!!
         private const string ApiKey = "AIzaSyBqxYv88YPxb1KV6KmrQtlX08m7d9vy8us";
 
-        private static readonly string ModelUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={ApiKey}";
+        // VERSION SETTING: Using Gemini 2.0 Flash Experimental
+        // (There is no 2.5 yet. This is the latest available.)
+        private static readonly string ModelUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={ApiKey}";
 
         public static async Task<string> AnalyzeCode(HttpClient client, string fileName, string codeContent)
         {
-            var prompt = $@"
-                You are an Expert Technical Writer. Analyze this code file: '{fileName}'.
-                
-                1. LANGUAGE: Identify the language (Python, C#, Java, etc.).
-                2. SUMMARY: Explain the business logic clearly.
-                3. DIAGRAM: 
-                   - If OOP (Java/C#), write a Mermaid 'classDiagram'.
-                   - If Script (Python/JS), write a Mermaid 'flowchart TD'.
-                   - Return ONLY the Mermaid syntax inside the code block.
-
-                Respond in this Markdown format:
-                ## File: {fileName}
-                **Language**: [Language Name]
-                **Summary**: [Your explanation]
-                
-                **Diagram**:
-                ```mermaid
-                [Mermaid Code Here]
-                ```
-                ---
-                CODE PREVIEW:
-                {codeContent.Substring(0, Math.Min(500, codeContent.Length))}...
-            ";
-
-            var requestBody = new
-            {
-                contents = new[] { new { parts = new[] { new { text = prompt } } } }
-            };
-
-            var json = JsonConvert.SerializeObject(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
             try
             {
+                // Safety: Limit characters to avoid request size errors
+                var safeCode = JsonConvert.ToString(codeContent.Substring(0, Math.Min(20000, codeContent.Length)));
+
+                var prompt = $@"
+                    Analyze this file: '{fileName}'.
+                    1. LANGUAGE: Identify.
+                    2. SUMMARY: Explain logic.
+                    3. DIAGRAM: Mermaid code.
+
+                    ## File: {fileName}
+                    **Language**: [Lang]
+                    **Summary**: [Summary]
+                    
+                    **Diagram**:
+                    ```mermaid
+                    [Mermaid Code]
+                    ```
+                ";
+
+                var requestBody = new
+                {
+                    contents = new[]
+                    {
+                        new { parts = new[] { new { text = prompt + "\n\nCODE:\n" + safeCode } } }
+                    }
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+
                 var response = await client.PostAsync(ModelUrl, content);
-                if (!response.IsSuccessStatusCode) return $"Error: API {response.StatusCode}";
+
+                // ERROR CAPTURE: If this fails, the PDF will tell you EXACTLY why.
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorDetails = await response.Content.ReadAsStringAsync();
+                    return $"⚠️ API Error {response.StatusCode}: {errorDetails}";
+                }
 
                 string responseJson = await response.Content.ReadAsStringAsync();
                 dynamic data = JsonConvert.DeserializeObject(responseJson);
@@ -58,7 +63,7 @@ namespace Documenter
             }
             catch (Exception ex)
             {
-                return $"AI Error: {ex.Message}";
+                return $"❌ Connection Error: {ex.Message}";
             }
         }
     }

@@ -8,19 +8,28 @@ namespace Documenter
     {
         public static void CloneRepository(string url, string targetPath)
         {
+            // Update: We now capture the ERROR message from Git to show you
             var info = new ProcessStartInfo("git", $"clone {url} \"{targetPath}\"")
             {
                 RedirectStandardOutput = true,
-                RedirectStandardError = true,
+                RedirectStandardError = true, // Capture errors
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
 
             using var process = Process.Start(info);
+
+            // Read the output strings
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+
             process.WaitForExit();
 
+            // If Git failed, show the ACTUAL error message
             if (process.ExitCode != 0)
-                throw new Exception("Git clone failed. Check the URL.");
+            {
+                throw new Exception($"Git Error: {error}");
+            }
         }
 
         public static void DeleteDirectory(string path)

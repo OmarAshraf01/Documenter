@@ -13,18 +13,15 @@ namespace Documenter
         // 1. Valid Extensions
         private readonly HashSet<string> _validExtensions = new()
         {
-            ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift"
+            ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift", ".kt"
         };
 
         // 2. Ignore Junk Folders
-        private readonly string[] _ignoredFolders = { "node_modules", "bin", "obj", ".git", ".vs", "dist", "build", "venv", "__pycache__" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "dist", "build", "venv", "__pycache__" };
 
         public Form1()
         {
             InitializeComponent();
-
-            // IMPORTANT: This line manually connects the button click.
-            // Even if the Designer is confused, this code will force it to work.
             btnStart.Click += BtnStart_Click;
         }
 
@@ -34,19 +31,40 @@ namespace Documenter
             if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Enter a valid URL."); return; }
 
             btnStart.Enabled = false;
-            string tempFolder = Path.Combine(Path.GetTempPath(), "Documenter_Agent_" + Guid.NewGuid().ToString().Substring(0, 5));
-            string reportContent = $"# Documentation for {repoUrl}\n\n";
+
+            // --- NEW PATH LOGIC ---
+            // 1. Get the folder where the .exe is running
+            string exeFolder = Application.StartupPath;
+
+            // 2. Extract Project Name from URL (e.g., 'Newtonsoft.Json')
+            string projectName = GetProjectNameFromUrl(repoUrl);
+
+            // 3. Define where to Clone (Separate folder next to exe)
+            string clonesRoot = Path.Combine(exeFolder, "Cloned_Repos");
+            string targetCloneFolder = Path.Combine(clonesRoot, projectName);
+
+            // 4. Define where to save PDF (Same folder as exe)
+            string pdfFilename = $"{projectName}_Documentation.pdf";
+            string pdfPath = Path.Combine(exeFolder, pdfFilename);
+
+            string reportContent = $"# Documentation for {projectName}\nSource: {repoUrl}\n\n";
 
             try
             {
-                Log($"⬇️ Cloning {repoUrl}...");
-                await Task.Run(() => GitService.CloneRepository(repoUrl, tempFolder));
+                // Clean up previous clone if it exists
+                if (Directory.Exists(targetCloneFolder)) GitService.DeleteDirectory(targetCloneFolder);
+                Directory.CreateDirectory(clonesRoot);
+
+                Log($"⬇️ Cloning {projectName}...");
+                Log($"📂 Destination: {targetCloneFolder}");
+
+                await Task.Run(() => GitService.CloneRepository(repoUrl, targetCloneFolder));
                 Log("✅ Clone Complete.");
 
-                var allFiles = Directory.GetFiles(tempFolder, "*.*", SearchOption.AllDirectories);
+                var allFiles = Directory.GetFiles(targetCloneFolder, "*.*", SearchOption.AllDirectories);
                 var codeFiles = allFiles.Where(IsCodeFile).ToList();
 
-                Log($"📂 Found {codeFiles.Count} code files. Starting Analysis...");
+                Log($"found {codeFiles.Count} code files. Starting Analysis...");
 
                 using var client = new HttpClient();
                 int counter = 1;
@@ -63,16 +81,15 @@ namespace Documenter
                     string analysis = await GeminiAgent.AnalyzeCode(client, fileName, code);
                     reportContent += analysis + "\n\n";
 
-                    await Task.Delay(4000); // 4-second delay for Free Tier
+                    await Task.Delay(4000);
                     counter++;
                 }
 
-                Log("📄 Generating PDF...");
-                string pdfPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Documenter_Report.pdf");
+                Log($"📄 Saving PDF as: {pdfFilename}...");
                 PdfReport.Generate(pdfPath, reportContent);
 
-                Log($"🎉 DONE! Saved to Desktop: {pdfPath}");
-                MessageBox.Show("Documentation Created Successfully!", "Success");
+                Log($"🎉 SUCCESS! PDF saved in app folder.");
+                MessageBox.Show($"Documentation saved to:\n{pdfPath}", "Success");
             }
             catch (Exception ex)
             {
@@ -81,9 +98,21 @@ namespace Documenter
             }
             finally
             {
-                GitService.DeleteDirectory(tempFolder);
+                // OPTIONAL: Keep the clone? Comment this line out if you want to keep the downloaded files.
+                GitService.DeleteDirectory(targetCloneFolder);
                 btnStart.Enabled = true;
             }
+        }
+
+        private string GetProjectNameFromUrl(string url)
+        {
+            // Logic: splits 'github.com/User/Project' and takes 'Project'
+            // Removes .git if present (e.g. Project.git -> Project)
+            if (string.IsNullOrWhiteSpace(url)) return "UnknownProject";
+
+            var uri = new Uri(url);
+            string lastSegment = uri.Segments.Last();
+            return lastSegment.Trim('/').Replace(".git", "");
         }
 
         private bool IsCodeFile(string path)
