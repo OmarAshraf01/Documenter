@@ -28,55 +28,53 @@
         /// </summary>
         private void InitializeComponent()
         {
-            textBox1 = new TextBox();
-            button1 = new Button();
-            listBox1 = new ListBox();
+            txtUrl = new TextBox();
+            btnStart = new Button();
+            lstLog = new ListBox();
             SuspendLayout();
             // 
-            // textBox1
+            // txtUrl
             // 
-            textBox1.Location = new Point(12, 37);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(452, 27);
-            textBox1.TabIndex = 0;
+            txtUrl.Location = new Point(12, 37);
+            txtUrl.Name = "txtUrl";
+            txtUrl.Size = new Size(452, 27);
+            txtUrl.TabIndex = 0;
             // 
-            // button1
+            // btnStart
             // 
-            button1.Location = new Point(157, 121);
-            button1.Name = "button1";
-            button1.Size = new Size(94, 29);
-            button1.TabIndex = 1;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
+            btnStart.Location = new Point(157, 121);
+            btnStart.Name = "btnStart";
+            btnStart.Size = new Size(150, 40);
+            btnStart.TabIndex = 1;
+            btnStart.Text = "Generate Docs";
+            btnStart.UseVisualStyleBackColor = true;
             // 
-            // listBox1
+            // lstLog
             // 
-            listBox1.FormattingEnabled = true;
-            listBox1.Location = new Point(579, 37);
-            listBox1.Name = "listBox1";
-            listBox1.Size = new Size(150, 104);
-            listBox1.TabIndex = 2;
+            lstLog.FormattingEnabled = true;
+            lstLog.Location = new Point(12, 180);
+            lstLog.Name = "lstLog";
+            lstLog.Size = new Size(700, 240);
+            lstLog.TabIndex = 2;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(743, 450);
-            Controls.Add(listBox1);
-            Controls.Add(button1);
-            Controls.Add(textBox1);
+            Controls.Add(lstLog);
+            Controls.Add(btnStart);
+            Controls.Add(txtUrl);
             Name = "Form1";
-            Text = "Form1";
-            Load += Form1_Load;
+            Text = "AI Documenter";
             ResumeLayout(false);
             PerformLayout();
         }
 
         #endregion
 
-        private TextBox textBox1;
-        private Button button1;
-        private ListBox listBox1;
+        private TextBox txtUrl;
+        private Button btnStart;
+        private ListBox lstLog;
     }
 }

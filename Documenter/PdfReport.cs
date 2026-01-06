@@ -2,13 +2,13 @@
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
-namespace AutoDocGui
+namespace Documenter
 {
     public class PdfReport
     {
         public static void Generate(string filePath, string content)
         {
-            QuestPDF.Settings.License = LicenseType.Community; // Free license
+            QuestPDF.Settings.License = LicenseType.Community;
 
             Document.Create(container =>
             {
@@ -27,8 +27,6 @@ namespace AutoDocGui
                         {
                             if (line.Trim().StartsWith("##"))
                                 x.Item().Text(line.Replace("#", "")).FontSize(16).Bold();
-                            else if (line.Trim().StartsWith("**Language**"))
-                                x.Item().Text(line).FontSize(12).Italic().FontColor(Colors.Grey.Darken2);
                             else
                                 x.Item().Text(line);
                         }
