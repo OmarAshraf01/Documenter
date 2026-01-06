@@ -54,13 +54,14 @@
             lstLog.FormattingEnabled = true;
             lstLog.Location = new Point(12, 180);
             lstLog.Name = "lstLog";
-            lstLog.Size = new Size(700, 240);
+            lstLog.Size = new Size(700, 224);
             lstLog.TabIndex = 2;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
+            BackColor = SystemColors.Menu;
             ClientSize = new Size(743, 450);
             Controls.Add(lstLog);
             Controls.Add(btnStart);
