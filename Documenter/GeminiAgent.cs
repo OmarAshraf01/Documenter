@@ -10,42 +10,43 @@ namespace Documenter
     {
         private const string OllamaUrl = "http://localhost:11434/api/generate";
 
-        public static async Task<string> AnalyzeCode(HttpClient sharedClient, string fileName, string codeContent)
+        public static async Task<string> AnalyzeCode(HttpClient ignoredClient, string fileName, string codeContent)
         {
             // --- FIX: CREATE A FRESH CLIENT FOR EVERY REQUEST ---
-            // This solves the "Instance has already started" error because we make a new one each time.
+            // This solves the "Instance has already started" error 100%.
             using var myClient = new HttpClient();
 
-            // Give it 10 minutes to think (Prevents timeout errors)
+            // Give it 10 minutes to think (Solves the Timeout error)
             myClient.Timeout = TimeSpan.FromMinutes(10);
 
             var safeCode = codeContent.Length > 15000 ? codeContent.Substring(0, 15000) : codeContent;
 
-            // THE "FRIENDLY EXPLAINER" PROMPT
+            // THE "NON-TECHNICAL FRIENDLY" PROMPT
             var prompt = $@"
-                You are a Senior Technical Writer creating documentation for a Product Manager. 
-                Your goal is to explain this code file ('{fileName}') simply and clearly.
+                You are a Friendly Coding Mentor. You are explaining this file ('{fileName}') to a beginner student.
+                
+                GOAL: Make them understand *why* this file exists and what problem it solves.
 
                 RULES:
-                1. NO CODING ADVICE. Do not say 'You should improve this'. Do not say 'It seems you pasted code'.
-                2. PLAIN ENGLISH. Avoid complex jargon. Explain *what* the code does for the business.
-                3. USE EMOJIS. Make it visually engaging (e.g., 🚀, 🛡️, 💾).
-                4. BE BRIEF. Bullet points only.
+                1. NO ROBOT TALK. Don't say 'This class instantiates objects'. Say 'This tool builds the user accounts'.
+                2. BE ENCOURAGING & SIMPLE. Use clear, plain English.
+                3. USE EMOJIS. Make it look like a blog post.
+                4. KEEP IT SHORT.
 
                 OUTPUT FORMAT (Strict Markdown):
                 ## 📄 {fileName}
                 **Language:** [Language Name]
 
-                ### 💡 What is this file?
-                [1 sentence explanation in plain English. Example: 'This file handles user logins and keeps passwords safe.']
+                ### 💡 In Plain English
+                [2-3 sentences explaining the file like you are talking to a friend. Use an analogy if possible.]
 
-                ### ⚡ Key Features
-                * 🛡️ **[Feature Name]:** [Simple explanation of what it does]
+                ### ⚡ What it actually does
+                * 🛡️ **[Feature Name]:** [Simple explanation]
                 * 💾 **[Feature Name]:** [Simple explanation]
                 * 🚀 **[Feature Name]:** [Simple explanation]
 
-                ### 🔗 Visual Structure
-                (Create a simple Mermaid diagram to show how this file works).
+                ### 🔗 How it connects
+                (A simple Mermaid diagram showing the flow).
                 ```mermaid
                 [Mermaid Code Here]
                 ```
@@ -66,7 +67,7 @@ namespace Documenter
 
             try
             {
-                // Use 'myClient' (the fresh one) instead of 'sharedClient'
+                // We use 'myClient' here, so the old one doesn't cause errors
                 var response = await myClient.PostAsync(OllamaUrl, content);
 
                 if (!response.IsSuccessStatusCode)
