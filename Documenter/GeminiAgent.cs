@@ -8,37 +8,44 @@ namespace Documenter
 {
     public class GeminiAgent
     {
-        // 1. POINT TO LOCALHOST (Your computer's local AI server)
         private const string OllamaUrl = "http://localhost:11434/api/generate";
 
-        public static async Task<string> AnalyzeCode(HttpClient client, string fileName, string codeContent)
+        public static async Task<string> AnalyzeCode(HttpClient sharedClient, string fileName, string codeContent)
         {
-            // Safety: Truncate very large files to prevent crashing the local model
+            // --- FIX: CREATE A FRESH CLIENT FOR EVERY REQUEST ---
+            // This solves the "Instance has already started" error because we make a new one each time.
+            using var myClient = new HttpClient();
+
+            // Give it 10 minutes to think (Prevents timeout errors)
+            myClient.Timeout = TimeSpan.FromMinutes(10);
+
             var safeCode = codeContent.Length > 15000 ? codeContent.Substring(0, 15000) : codeContent;
 
-            // 2. THE "SENIOR DEVELOPER" PROMPT
-            // This forces DeepSeek to write clean, scannable docs with emojis.
+            // THE "FRIENDLY EXPLAINER" PROMPT
             var prompt = $@"
-                You are a Senior Lead Developer writing technical documentation. 
-                Analyze this code file: '{fileName}'.
+                You are a Senior Technical Writer creating documentation for a Product Manager. 
+                Your goal is to explain this code file ('{fileName}') simply and clearly.
 
-                GUIDELINES:
-                1. BE CONCISE. Use bullet points. No long paragraphs.
-                2. SKIP BASICS. Do not explain syntax (e.g. 'int is a number'). Focus on BUSINESS LOGIC.
-                3. VISUALS. Use emojis (📄, ⚡, 🔗) to make it scannable.
+                RULES:
+                1. NO CODING ADVICE. Do not say 'You should improve this'. Do not say 'It seems you pasted code'.
+                2. PLAIN ENGLISH. Avoid complex jargon. Explain *what* the code does for the business.
+                3. USE EMOJIS. Make it visually engaging (e.g., 🚀, 🛡️, 💾).
+                4. BE BRIEF. Bullet points only.
 
                 OUTPUT FORMAT (Strict Markdown):
                 ## 📄 {fileName}
                 **Language:** [Language Name]
-                
-                ### ⚡ Key Features
-                * [Point 1: What does this file actually DO?]
-                * [Point 2: Important logic/algorithms]
-                * [Point 3: Key database or API interactions]
 
-                ### 🔗 Structure
-                (If class-based, use a Mermaid classDiagram. If script, use a flowchart TD).
-                - RETURN ONLY THE MERMAID CODE inside ```mermaid blocks.
+                ### 💡 What is this file?
+                [1 sentence explanation in plain English. Example: 'This file handles user logins and keeps passwords safe.']
+
+                ### ⚡ Key Features
+                * 🛡️ **[Feature Name]:** [Simple explanation of what it does]
+                * 💾 **[Feature Name]:** [Simple explanation]
+                * 🚀 **[Feature Name]:** [Simple explanation]
+
+                ### 🔗 Visual Structure
+                (Create a simple Mermaid diagram to show how this file works).
                 ```mermaid
                 [Mermaid Code Here]
                 ```
@@ -47,12 +54,11 @@ namespace Documenter
                 {safeCode}
             ";
 
-            // 3. OLLAMA REQUEST FORMAT
             var requestBody = new
             {
-                model = "deepseek-coder", // The model you downloaded
+                model = "deepseek-coder",
                 prompt = prompt,
-                stream = false            // Get the full response at once (easier to handle)
+                stream = false
             };
 
             var json = JsonConvert.SerializeObject(requestBody);
@@ -60,21 +66,19 @@ namespace Documenter
 
             try
             {
-                // 4. SEND TO LOCAL SERVER
-                var response = await client.PostAsync(OllamaUrl, content);
+                // Use 'myClient' (the fresh one) instead of 'sharedClient'
+                var response = await myClient.PostAsync(OllamaUrl, content);
 
                 if (!response.IsSuccessStatusCode)
                     return $"⚠️ Error: Local AI is not running. Open CMD and type 'ollama serve'.";
 
                 string responseJson = await response.Content.ReadAsStringAsync();
-
-                // 5. PARSE OLLAMA RESPONSE
                 dynamic data = JsonConvert.DeserializeObject(responseJson);
                 return data?.response ?? "No response from Local AI.";
             }
             catch (Exception ex)
             {
-                return $"❌ Local AI Error: {ex.Message}. Make sure Ollama is installed!";
+                return $"❌ Local AI Error: {ex.Message}";
             }
         }
     }
