@@ -12,46 +12,54 @@ namespace Documenter
 
         public static async Task<string> AnalyzeCode(HttpClient ignoredClient, string fileName, string codeContent)
         {
-            // --- FIX: CREATE A FRESH CLIENT FOR EVERY REQUEST ---
-            // This solves the "Instance has already started" error 100%.
+            // 1. FAIL-SAFE: Create a fresh connection for every file
             using var myClient = new HttpClient();
 
-            // Give it 10 minutes to think (Solves the Timeout error)
-            myClient.Timeout = TimeSpan.FromMinutes(10);
+            // 2. HARD LIMIT: If AI takes more than 3 minutes, kill it and move on.
+            myClient.Timeout = TimeSpan.FromMinutes(3);
 
-            var safeCode = codeContent.Length > 15000 ? codeContent.Substring(0, 15000) : codeContent;
+            // 3. SAFETY CUT: If code is massive (>10k chars), cut it so AI doesn't crash.
+            var safeCode = codeContent.Length > 10000 ? codeContent.Substring(0, 10000) + "\n...(truncated)..." : codeContent;
 
-            // THE "NON-TECHNICAL FRIENDLY" PROMPT
+            // 4. ARCHITECT PROMPT (The good one you asked for)
             var prompt = $@"
-                You are a Friendly Coding Mentor. You are explaining this file ('{fileName}') to a beginner student.
+                You are a Senior System Architect. Analyze this C# file: '{fileName}'.
                 
-                GOAL: Make them understand *why* this file exists and what problem it solves.
-
-                RULES:
-                1. NO ROBOT TALK. Don't say 'This class instantiates objects'. Say 'This tool builds the user accounts'.
-                2. BE ENCOURAGING & SIMPLE. Use clear, plain English.
-                3. USE EMOJIS. Make it look like a blog post.
-                4. KEEP IT SHORT.
+                YOUR TASK:
+                1. Define the class and its role.
+                2. List Variables/Properties.
+                3. List Methods/Functions.
+                4. Explain relationships (Inheritance/Dependencies).
 
                 OUTPUT FORMAT (Strict Markdown):
-                ## 📄 {fileName}
-                **Language:** [Language Name]
+                ## 📂 File: {fileName}
+                **Type:** [Class / Interface / Form]
+                
+                ### 🏗️ Structure & Logic
+                [Brief explanation of what this file does.]
 
-                ### 💡 In Plain English
-                [2-3 sentences explaining the file like you are talking to a friend. Use an analogy if possible.]
+                ### 🔗 Relationships
+                * **Inherits:** [Parent Class]
+                * **Uses:** [List other classes it calls]
 
-                ### ⚡ What it actually does
-                * 🛡️ **[Feature Name]:** [Simple explanation]
-                * 💾 **[Feature Name]:** [Simple explanation]
-                * 🚀 **[Feature Name]:** [Simple explanation]
+                ### 📦 Variables
+                | Name | Type | Description |
+                |---|---|---|
+                | [Name] | [Type] | [Brief Desc] |
 
-                ### 🔗 How it connects
-                (A simple Mermaid diagram showing the flow).
+                ### 🛠️ Methods
+                * **[MethodName]**: [What does it do?]
+
+                ### 📐 Visual Diagram
                 ```mermaid
-                [Mermaid Code Here]
+                classDiagram
+                class {fileName.Replace(".", "_")} {{
+                    +[Property]
+                    +[Method]()
+                }}
                 ```
                 ---
-                CODE CONTEXT:
+                CODE:
                 {safeCode}
             ";
 
@@ -62,24 +70,29 @@ namespace Documenter
                 stream = false
             };
 
-            var json = JsonConvert.SerializeObject(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
             try
             {
-                // We use 'myClient' here, so the old one doesn't cause errors
+                var json = JsonConvert.SerializeObject(requestBody);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                // Send request and wait (up to 3 mins)
                 var response = await myClient.PostAsync(OllamaUrl, content);
 
                 if (!response.IsSuccessStatusCode)
-                    return $"⚠️ Error: Local AI is not running. Open CMD and type 'ollama serve'.";
+                    return $"⚠️ AI Error: {response.StatusCode}. Is Ollama running?";
 
                 string responseJson = await response.Content.ReadAsStringAsync();
                 dynamic data = JsonConvert.DeserializeObject(responseJson);
-                return data?.response ?? "No response from Local AI.";
+                return data?.response ?? "No response.";
+            }
+            catch (TaskCanceledException)
+            {
+                // This catches the "15 mins stuck" issue!
+                return "⚠️ SKIPPED: File was too complex and timed out (Limit: 3 mins).";
             }
             catch (Exception ex)
             {
-                return $"❌ Local AI Error: {ex.Message}";
+                return $"❌ Error: {ex.Message}";
             }
         }
     }
