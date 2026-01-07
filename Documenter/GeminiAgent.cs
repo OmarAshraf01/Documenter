@@ -6,64 +6,65 @@ using Newtonsoft.Json;
 
 namespace Documenter
 {
-    public class GeminiAgent
+    public class GeminiAgent // Keeping the name
     {
-        // !!! PASTE YOUR NEW KEY HERE !!!
-        private const string ApiKey = "AIzaSyBqxYv88YPxb1KV6KmrQtlX08m7d9vy8us";
-
-        // VERSION SETTING: Using Gemini 2.0 Flash Experimental
-        // (There is no 2.5 yet. This is the latest available.)
-        private static readonly string ModelUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={ApiKey}";
+        // 1. POINT TO LOCALHOST (own computer)
+        private const string OllamaUrl = "http://localhost:11434/api/generate";
 
         public static async Task<string> AnalyzeCode(HttpClient client, string fileName, string codeContent)
         {
+            // Safety: DeepSeek handles large context well, but let's keep it safe.
+            var safeCode = codeContent.Length > 15000 ? codeContent.Substring(0, 15000) : codeContent;
+
+            var prompt = $@"
+                You are an Expert Technical Writer. Analyze this code file: '{fileName}'.
+                
+                1. LANGUAGE: Identify the language.
+                2. SUMMARY: Explain the business logic clearly.
+                3. DIAGRAM: Write a Mermaid 'classDiagram' or 'flowchart TD'.
+                   - RETURN ONLY THE MERMAID CODE inside ```mermaid blocks.
+
+                ## File: {fileName}
+                **Language**: [Language Name]
+                **Summary**: [Your explanation]
+                
+                **Diagram**:
+                ```mermaid
+                [Mermaid Code Here]
+                ```
+                ---
+                CODE:
+                {safeCode}
+            ";
+
+            // 2. NEW JSON FORMAT (Ollama expects this structure)
+            var requestBody = new
+            {
+                model = "deepseek-coder", // The model
+                prompt = prompt,
+                stream = false            // Get the whole response at once
+            };
+
+            var json = JsonConvert.SerializeObject(requestBody);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
             try
             {
-                // Safety: Limit characters to avoid request size errors
-                var safeCode = JsonConvert.ToString(codeContent.Substring(0, Math.Min(20000, codeContent.Length)));
+                // 3. SEND TO LOCAL SERVER
+                var response = await client.PostAsync(OllamaUrl, content);
 
-                var prompt = $@"
-                    Analyze this file: '{fileName}'.
-                    1. LANGUAGE: Identify.
-                    2. SUMMARY: Explain logic.
-                    3. DIAGRAM: Mermaid code.
-
-                    ## File: {fileName}
-                    **Language**: [Lang]
-                    **Summary**: [Summary]
-                    
-                    **Diagram**:
-                    ```mermaid
-                    [Mermaid Code]
-                    ```
-                ";
-
-                var requestBody = new
-                {
-                    contents = new[]
-                    {
-                        new { parts = new[] { new { text = prompt + "\n\nCODE:\n" + safeCode } } }
-                    }
-                };
-
-                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-
-                var response = await client.PostAsync(ModelUrl, content);
-
-                // ERROR CAPTURE: If this fails, the PDF will tell you EXACTLY why.
                 if (!response.IsSuccessStatusCode)
-                {
-                    string errorDetails = await response.Content.ReadAsStringAsync();
-                    return $"⚠️ API Error {response.StatusCode}: {errorDetails}";
-                }
+                    return $"Error: Local AI is not running. Open CMD and type 'ollama serve'.";
 
                 string responseJson = await response.Content.ReadAsStringAsync();
+
+                // 4. PARSE OLLAMA RESPONSE
                 dynamic data = JsonConvert.DeserializeObject(responseJson);
-                return data?.candidates?[0]?.content?.parts?[0]?.text ?? "No response.";
+                return data?.response ?? "No response.";
             }
             catch (Exception ex)
             {
-                return $"❌ Connection Error: {ex.Message}";
+                return $"Local AI Error: {ex.Message}. Make sure Ollama is installed!";
             }
         }
     }

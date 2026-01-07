@@ -8,7 +8,7 @@ namespace Documenter
     {
         public static void CloneRepository(string url, string targetPath)
         {
-            // Update: We now capture the ERROR message from Git to show you
+            // Update: We now capture the ERROR message from Git to show it properly.
             var info = new ProcessStartInfo("git", $"clone {url} \"{targetPath}\"")
             {
                 RedirectStandardOutput = true,

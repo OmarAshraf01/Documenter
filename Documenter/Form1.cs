@@ -81,7 +81,7 @@ namespace Documenter
                     string analysis = await GeminiAgent.AnalyzeCode(client, fileName, code);
                     reportContent += analysis + "\n\n";
 
-                    await Task.Delay(4000);
+                    await Task.Delay(100); //for rate limiting
                     counter++;
                 }
 
