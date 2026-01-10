@@ -10,7 +10,7 @@ namespace Documenter
     {
         // Connect to Docker on Localhost
         private const string OllamaUrl = "http://localhost:11434/api/generate";
-        private const string ModelName = "qwen2.5-coder:7b";
+        private const string ModelName = "qwen2.5-coder:1.5b";
 
         public static async Task<string> AnalyzeCode(string fileName, string codeContent, string context)
         {
