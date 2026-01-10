@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -10,125 +9,95 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        // 1. Valid Extensions
-        private readonly HashSet<string> _validExtensions = new()
-        {
-            ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift", ".kt"
-        };
-
-        // 2. Ignore Junk Folders
-        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "dist", "build", "venv", "__pycache__"};
+        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".cpp" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj" };
 
         public Form1()
         {
             InitializeComponent();
-            // REMOVED: btnStart.Click += ... 
-            // Why? Because the Designer already handles this. Adding it here causes the "Line 51" error.
             btnStart.Click += BtnStart_Click;
         }
 
         private async void BtnStart_Click(object sender, EventArgs e)
         {
             string repoUrl = txtUrl.Text;
-            if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Enter a valid URL."); return; }
+            if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Enter a URL."); return; }
 
             btnStart.Enabled = false;
-
-            // --- PATH LOGIC ---
             string exeFolder = Application.StartupPath;
-            string projectName = GetProjectNameFromUrl(repoUrl);
+            string projectName = new Uri(repoUrl).Segments.Last().Trim('/').Replace(".git", "");
             string clonesRoot = Path.Combine(exeFolder, "Cloned_Repos");
-            string targetCloneFolder = Path.Combine(clonesRoot, projectName);
-            string pdfFilename = $"{projectName}_Documentation.pdf";
-            string pdfPath = Path.Combine(exeFolder, pdfFilename);
+            string targetFolder = Path.Combine(clonesRoot, projectName);
+            string pdfPath = Path.Combine(exeFolder, $"{projectName}_Docs.pdf");
 
-            string reportContent = $"# Documentation for {projectName}\nSource: {repoUrl}\n\n";
+            string reportContent = $"# Documentation for {projectName}\n\n";
 
             try
             {
-                // 1. CLEANUP & CLONE
-                if (Directory.Exists(targetCloneFolder)) GitService.DeleteDirectory(targetCloneFolder);
+                // 1. CLONE
+                if (Directory.Exists(targetFolder)) GitService.DeleteDirectory(targetFolder);
                 Directory.CreateDirectory(clonesRoot);
-
                 Log($"⬇️ Cloning {projectName}...");
-                await Task.Run(() => GitService.CloneRepository(repoUrl, targetCloneFolder));
-                Log("✅ Clone Complete.");
+                await Task.Run(() => GitService.CloneRepository(repoUrl, targetFolder));
 
-                // 2. FIND FILES
-                var allFiles = Directory.GetFiles(targetCloneFolder, "*.*", SearchOption.AllDirectories);
-                var codeFiles = allFiles.Where(IsCodeFile).ToList();
+                // 2. INDEX FILES (RAG) - CRITICAL STEP
+                Log("🧠 Indexing project structure...");
+                RagService.IndexProject(targetFolder);
 
-                Log($"found {codeFiles.Count} code files. Starting Analysis...");
+                // 3. ANALYZE FILES
+                var allFiles = Directory.GetFiles(targetFolder, "*.*", SearchOption.AllDirectories)
+                                        .Where(IsCodeFile).ToList();
+
+                Log($"Found {allFiles.Count} files. Starting Qwen 2.5 Analysis...");
 
                 int counter = 1;
-
-                foreach (var file in codeFiles)
+                foreach (var file in allFiles)
                 {
                     string fileName = Path.GetFileName(file);
                     string code = await File.ReadAllTextAsync(file);
 
-                    // Skip empty files. (We removed the upper limit so the Agent handles truncation)
                     if (code.Length < 50) continue;
 
-                    Log($"[{counter}/{codeFiles.Count}] 🧠 Analyzing {fileName}...");
+                    Log($"[{counter}/{allFiles.Count}] Analyzing {fileName}...");
 
-                    // --- CALL THE FAIL-SAFE AGENT ---
-                    // We pass 'null' for the client because the Agent now creates a FRESH connection internally
-                    string analysis = await GeminiAgent.AnalyzeCode(null, fileName, code);
+                    // 4. GET CONTEXT (RAG)
+                    string context = RagService.GetContext(code);
 
-                    // --- CHECK FOR SKIPS/ERRORS ---
-                    if (analysis.Contains("SKIPPED") || analysis.Contains("Error") || analysis.Contains("⚠️"))
-                    {
-                        Log($"⚠️ Skipped {fileName} (Timeout or Error). Moving on...");
-                        reportContent += $"## 📂 File: {fileName}\n\n**Status:** ⚠️ Analysis Timed Out or Failed.\n\n";
-                    }
+                    // 5. CALL AI (Docker)
+                    string analysis = await AiAgent.AnalyzeCode(fileName, code, context);
+
+                    if (analysis.Contains("Error"))
+                        Log($"⚠️ {fileName}: {analysis}");
                     else
                     {
                         reportContent += analysis + "\n\n";
-                        Log($"✅ {fileName} Done!");
+                        Log($"✅ {fileName} Done.");
                     }
-
                     counter++;
-                    // No Delay needed anymore because the Local AI is the bottleneck, not the network.
                 }
 
-                // 3. GENERATE PDF
-                Log($"📄 Saving PDF as: {pdfFilename}...");
+                // 6. SAVE PDF
+                Log("📄 Generating PDF...");
                 PdfReport.Generate(pdfPath, reportContent);
-
-                Log($"🎉 SUCCESS! PDF saved.");
-                MessageBox.Show($"Documentation saved to:\n{pdfPath}", "Success");
+                MessageBox.Show($"Saved to:\n{pdfPath}", "Success");
             }
             catch (Exception ex)
             {
                 Log($"❌ Critical Error: {ex.Message}");
-                MessageBox.Show(ex.Message, "Error");
+                MessageBox.Show(ex.Message);
             }
             finally
             {
-                // Cleanup (Optional)
-                GitService.DeleteDirectory(targetCloneFolder);
                 btnStart.Enabled = true;
             }
-        }
-
-        private string GetProjectNameFromUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url)) return "UnknownProject";
-            var uri = new Uri(url);
-            return uri.Segments.Last().Trim('/').Replace(".git", "");
         }
 
         private bool IsCodeFile(string path)
         {
             string ext = Path.GetExtension(path).ToLower();
             if (!_validExtensions.Contains(ext)) return false;
-
-            foreach (var badFolder in _ignoredFolders)
-            {
-                if (path.Contains(Path.DirectorySeparatorChar + badFolder + Path.DirectorySeparatorChar))
-                    return false;
-            }
+            foreach (var bad in _ignoredFolders)
+                if (path.Contains(Path.DirectorySeparatorChar + bad + Path.DirectorySeparatorChar)) return false;
             return true;
         }
 
