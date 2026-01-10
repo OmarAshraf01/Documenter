@@ -10,7 +10,7 @@ namespace Documenter
     public partial class Form1 : Form
     {
         private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".cpp" };
-        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs" };
 
         public Form1()
         {
