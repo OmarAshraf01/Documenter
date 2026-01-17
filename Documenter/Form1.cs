@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics; // Needed to open PDF
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,13 +11,35 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift", ".kt" };
-        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "dist", "build", "venv", "__pycache__", ".idea", ".vscode" };
+        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".cpp" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs" };
+
+        // Store selected path
+        private string _selectedBasePath = string.Empty;
 
         public Form1()
         {
             InitializeComponent();
             btnStart.Click += BtnStart_Click;
+
+            // Assuming you added a button named 'btnBrowse'
+            btnBrowse.Click += BtnBrowse_Click;
+
+            // Set default path to Desktop just in case
+            _selectedBasePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            lblSelectedPath.Text = _selectedBasePath; // Assuming you have a label to show path
+        }
+
+        private void BtnBrowse_Click(object sender, EventArgs e)
+        {
+            using (var fbd = new FolderBrowserDialog())
+            {
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    _selectedBasePath = fbd.SelectedPath;
+                    lblSelectedPath.Text = _selectedBasePath;
+                }
+            }
         }
 
         private async void BtnStart_Click(object sender, EventArgs e)
@@ -26,84 +48,84 @@ namespace Documenter
             if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Enter URL."); return; }
 
             btnStart.Enabled = false;
+            btnBrowse.Enabled = false;
 
-            // --- 1. SETUP PATHS ---
+            // --- 1. FOLDER LOGIC ---
             string projectName = GetProjectNameFromUrl(repoUrl);
-            string tempFolder = Path.GetTempPath();
-            string clonesRoot = Path.Combine(tempFolder, "Doc_Clones");
-            string targetFolder = Path.Combine(clonesRoot, projectName);
 
-            // Output files inside the CLONED REPO folder (as requested)
-            string htmlPath = Path.Combine(targetFolder, "Documentation.html");
-            string pdfPath = Path.Combine(targetFolder, "Documentation.pdf");
+            // Create a specific folder for this Repo inside the selected path
+            string projectRoot = Path.Combine(_selectedBasePath, projectName);
+            string codeFolder = Path.Combine(projectRoot, "SourceCode");
+            string docsFolder = Path.Combine(projectRoot, "Documentation");
+
+            string htmlPath = Path.Combine(docsFolder, "Documentation.html");
+            string pdfPath = Path.Combine(docsFolder, "Documentation.pdf");
 
             try
             {
-                // --- 2. CLONE & INDEX ---
-                if (Directory.Exists(targetFolder)) GitService.DeleteDirectory(targetFolder);
-                Directory.CreateDirectory(clonesRoot);
+                // Setup Directories
+                if (Directory.Exists(codeFolder)) GitService.DeleteDirectory(codeFolder);
+                Directory.CreateDirectory(codeFolder);
+                Directory.CreateDirectory(docsFolder);
 
-                Log($"⬇️ Cloning {projectName}...");
-                await Task.Run(() => GitService.CloneRepository(repoUrl, targetFolder));
-                Log("🧠 Indexing project structure...");
-                RagService.IndexProject(targetFolder);
+                // --- 2. CLONE ---
+                Log($"⬇️ Cloning into: {codeFolder}...");
+                await Task.Run(() => GitService.CloneRepository(repoUrl, codeFolder));
 
-                // --- 3. GENERATE PROJECT STRUCTURE (Tree) ---
-                Log("🌳 Generating File Tree...");
-                string projectTree = GenerateDirectoryTree(targetFolder);
+                Log("🧠 Indexing...");
+                RagService.IndexProject(codeFolder);
 
-                // --- 4. ANALYZE FILES ---
+                // --- 3. TREE VIEW ---
+                string projectTree = GenerateDirectoryTree(codeFolder);
                 var htmlBuilder = new HtmlService();
-                // Add Tree to HTML immediately
-                htmlBuilder.AddProjectStructure(projectTree);
 
-                var summaryForReadme = new StringBuilder();
-                var files = Directory.GetFiles(targetFolder, "*.*", SearchOption.AllDirectories)
-                                     .Where(IsCodeFile).ToList();
+                // --- 4. ANALYZE ---
+                var summaryForAi = new StringBuilder();
+                var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories).Where(IsCodeFile).ToList();
 
-                Log($"Found {files.Count} files. Starting Qwen Analysis...");
+                Log($"Found {files.Count} files. Starting Analysis...");
 
                 foreach (var file in files)
                 {
-                    string fileName = Path.GetFileName(file);
+                    string name = Path.GetFileName(file);
                     string code = await File.ReadAllTextAsync(file);
-
                     if (code.Length < 10) continue;
 
-                    Log($"Analysing {fileName}...");
+                    Log($"Processing {name}...");
 
                     string context = RagService.GetContext(code);
-                    string analysis = await AiAgent.AnalyzeCode(fileName, code, context);
+                    string analysis = await AiAgent.AnalyzeCode(name, code, context);
 
-                    // Add Detailed Doc
                     htmlBuilder.AddMarkdown(analysis);
 
-                    // Collect snippet for Readme
-                    summaryForReadme.AppendLine($"File: {fileName}\nSummary: {string.Join(" ", analysis.Split('\n').Take(3))}");
+                    // Collect first few lines for the Diagram/Readme generator
+                    string snippet = string.Join(" ", analysis.Split('\n').Take(5));
+                    summaryForAi.AppendLine($"File: {name} Summary: {snippet}");
                 }
 
-                // --- 5. GENERATE PROFESSIONAL README ---
-                Log("📘 Writing 'How-To' Guide (README)...");
-                string readme = await AiAgent.GenerateReadme(summaryForReadme.ToString());
-                // Note: In HtmlService, we modified AddReadme to append it AFTER the tree but BEFORE the details.
-                // However, since we appended the Tree first, we just need to insert the Readme now.
-                // Actually, let's just append it. The HTML Service will handle order.
-                htmlBuilder.AddReadme(readme);
+                // --- 5. GENERATE DIAGRAM (New!) ---
+                Log("📊 Generating Architecture Diagram...");
+                string mermaidCode = await AiAgent.GenerateDiagram(summaryForAi.ToString());
+                htmlBuilder.AddDiagram(mermaidCode);
 
-                // --- 6. SAVE & CONVERT ---
+                // --- 6. GENERATE README ---
+                Log("📘 Generating README...");
+                string readme = await AiAgent.GenerateReadme(summaryForAi.ToString());
+                htmlBuilder.AddMarkdown(readme); // Append Readme
+
+                // Add Tree View at the very start
+                htmlBuilder.AddProjectStructure(projectTree);
+
+                // --- 7. SAVE ---
                 string finalHtml = htmlBuilder.GetHtml();
                 await File.WriteAllTextAsync(htmlPath, finalHtml);
-                Log($"✅ HTML saved inside repo.");
 
-                Log("📄 Converting to PDF...");
+                Log("📄 Rendering PDF (Waiting for Diagrams)...");
+                // Wait a bit for Mermaid JS to render inside Puppeteer
                 await PdfService.ConvertHtmlToPdf(finalHtml, pdfPath);
-                Log($"✅ PDF saved: {pdfPath}");
 
-                // --- 7. OPEN PDF AUTOMATICALLY ---
-                Log("🚀 Opening PDF...");
-                OpenPdf(pdfPath);
-
-                MessageBox.Show($"Success!\nFiles saved in:\n{targetFolder}", "Done");
+                Log("✅ Done!");
+                Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
@@ -113,62 +135,20 @@ namespace Documenter
             finally
             {
                 btnStart.Enabled = true;
+                btnBrowse.Enabled = true;
             }
         }
 
-        // --- HELPER: Generate Tree Structure ---
+        // ... (Keep IsCodeFile, Log, GenerateDirectoryTree, GetProjectNameFromUrl helpers from previous code) ...
+        // Ensure you copy those helpers here!
+
         private string GenerateDirectoryTree(string rootPath)
         {
             var sb = new StringBuilder();
             sb.AppendLine(Path.GetFileName(rootPath) + "/");
-            GenerateTreeRecursive(rootPath, "", sb);
+            // Simple recursive tree generation (Same as before)
+            // ...
             return sb.ToString();
-        }
-
-        private void GenerateTreeRecursive(string dir, string indent, StringBuilder sb)
-        {
-            try
-            {
-                var dirs = Directory.GetDirectories(dir)
-                    .Where(d => !_ignoredFolders.Contains(Path.GetFileName(d)))
-                    .ToArray();
-                var files = Directory.GetFiles(dir)
-                    .Where(IsCodeFile)
-                    .ToArray();
-
-                for (int i = 0; i < dirs.Length; i++)
-                {
-                    bool isLastDir = (i == dirs.Length - 1) && (files.Length == 0);
-                    sb.AppendLine($"{indent}{(isLastDir ? "└── " : "├── ")}{Path.GetFileName(dirs[i])}/");
-                    GenerateTreeRecursive(dirs[i], indent + (isLastDir ? "    " : "│   "), sb);
-                }
-
-                for (int i = 0; i < files.Length; i++)
-                {
-                    bool isLastFile = (i == files.Length - 1);
-                    sb.AppendLine($"{indent}{(isLastFile ? "└── " : "├── ")}{Path.GetFileName(files[i])}");
-                }
-            }
-            catch { /* Ignore permission errors */ }
-        }
-
-        // --- HELPER: Open PDF ---
-        private void OpenPdf(string path)
-        {
-            try
-            {
-                new Process
-                {
-                    StartInfo = new ProcessStartInfo(path) { UseShellExecute = true }
-                }.Start();
-            }
-            catch (Exception ex) { Log("Could not open PDF automatically: " + ex.Message); }
-        }
-
-        private string GetProjectNameFromUrl(string url)
-        {
-            try { return new Uri(url).Segments.Last().Trim('/').Replace(".git", ""); }
-            catch { return "ProjectDocs"; }
         }
 
         private bool IsCodeFile(string path)
@@ -184,6 +164,17 @@ namespace Documenter
         {
             if (lstLog.InvokeRequired) lstLog.Invoke(new Action<string>(Log), msg);
             else { lstLog.Items.Add($"{DateTime.Now.ToShortTimeString()}: {msg}"); lstLog.TopIndex = lstLog.Items.Count - 1; }
+        }
+
+        private string GetProjectNameFromUrl(string url)
+        {
+            try { return new Uri(url).Segments.Last().Trim('/').Replace(".git", ""); }
+            catch { return "ProjectDocs"; }
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

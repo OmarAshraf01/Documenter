@@ -11,15 +11,13 @@ namespace Documenter
         private const string OllamaUrl = "http://localhost:11434/api/generate";
         private const string ModelName = "qwen2.5-coder:1.5b";
 
-        // 1. Analyze a Single Code File
         public static async Task<string> AnalyzeCode(string fileName, string code, string context)
         {
-            // Truncate huge files
-            if (code.Length > 6000) code = code.Substring(0, 6000) + "...[truncated]";
+            if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
 
             var prompt = $@"
                 [ROLE: Expert Technical Writer]
-                Analyze this file: '{fileName}'.
+                Analyze file: '{fileName}'.
 
                 ### 📂 CODE
                 {code}
@@ -27,14 +25,16 @@ namespace Documenter
                 ### 🧩 CONTEXT
                 {context}
 
-                ### INSTRUCTIONS
-                1. IF '*.Designer.cs': Briefly describe UI controls only.
-                2. IF '*.cs': Explain Logic, Methods, and Data Flow.
-                3. **CRITICAL**: Format tables perfectly using Markdown.
-                
-                ### OUTPUT FORMAT (Markdown)
+                ### RULES
+                1. Use **Standard Markdown Tables** for properties/methods. 
+                   - Format: | Name | Type | Description |
+                   - ALWAYS include a blank line before the table.
+                2. If '*.Designer.cs': Only summarize UI controls.
+                3. If '*.cs': Explain Logic.
+
+                ### OUTPUT FORMAT
                 ## 📄 {fileName}
-                **Type:** [Class/Form/Interface]
+                **Type:** [Class/Form]
 
                 ### 📘 Summary
                 [Brief description]
@@ -48,26 +48,41 @@ namespace Documenter
             return await CallOllama(prompt);
         }
 
-        // 2. Generate the "README / User Guide"
+        public static async Task<string> GenerateDiagram(string projectSummary)
+        {
+            var prompt = $@"
+                [ROLE: System Architect]
+                Based on these file summaries, generate a **Mermaid.js Class Diagram** representing the relationship between BLL, DAL, and Forms.
+
+                ### FILES
+                {projectSummary}
+
+                ### OUTPUT
+                Return ONLY the mermaid code. Start with 'classDiagram'.
+                Example:
+                classDiagram
+                  class LoginBLL
+                  class LoginDAL
+                  LoginBLL --> LoginDAL
+            ";
+            return await CallOllama(prompt);
+        }
+
         public static async Task<string> GenerateReadme(string projectSummary)
         {
             var prompt = $@"
                 [ROLE: Product Manager]
-                Write a PROFESSIONAL README.MD and USER GUIDE for this project based on the file summaries below.
-
-                ### 📂 PROJECT FILE SUMMARIES
+                Write a concise README.MD for this project.
+                
+                ### FILES
                 {projectSummary}
 
-                ### TASK
-                Write a Github-style README that includes:
-                1. **Project Title & Description** (Infer from the summaries).
-                2. **Features List** (What can this app do?).
-                3. **Getting Started** (How to run it?).
-                4. **Architecture Overview** (How BLL/DAL/UI connect).
-
-                Make it look professional.
+                ### FORMAT
+                # Project Name
+                ## Description
+                ## Features
+                ## How to Run
             ";
-
             return await CallOllama(prompt);
         }
 
@@ -78,9 +93,8 @@ namespace Documenter
 
             try
             {
-                var response = await client.PostAsync(OllamaUrl,
-                    new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json"));
-
+                var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(OllamaUrl, content);
                 if (!response.IsSuccessStatusCode) return "⚠️ AI Error.";
 
                 dynamic json = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());

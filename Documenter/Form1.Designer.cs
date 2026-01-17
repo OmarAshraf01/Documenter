@@ -31,6 +31,8 @@
             txtUrl = new TextBox();
             btnStart = new Button();
             lstLog = new ListBox();
+            btnBrowse = new Button();
+            lblSelectedPath = new TextBox();
             SuspendLayout();
             // 
             // txtUrl
@@ -57,12 +59,31 @@
             lstLog.Size = new Size(700, 224);
             lstLog.TabIndex = 2;
             // 
+            // btnBrowse
+            // 
+            btnBrowse.Location = new Point(471, 71);
+            btnBrowse.Name = "btnBrowse";
+            btnBrowse.Size = new Size(94, 29);
+            btnBrowse.TabIndex = 3;
+            btnBrowse.Text = "Browse";
+            btnBrowse.UseVisualStyleBackColor = true;
+            btnBrowse.Click += button1_Click;
+            // 
+            // lblSelectedPath
+            // 
+            lblSelectedPath.Location = new Point(13, 73);
+            lblSelectedPath.Name = "lblSelectedPath";
+            lblSelectedPath.Size = new Size(452, 27);
+            lblSelectedPath.TabIndex = 4;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Menu;
             ClientSize = new Size(743, 450);
+            Controls.Add(lblSelectedPath);
+            Controls.Add(btnBrowse);
             Controls.Add(lstLog);
             Controls.Add(btnStart);
             Controls.Add(txtUrl);
@@ -77,5 +98,7 @@
         private TextBox txtUrl;
         private Button btnStart;
         private ListBox lstLog;
+        private Button btnBrowse;
+        private TextBox lblSelectedPath;
     }
 }

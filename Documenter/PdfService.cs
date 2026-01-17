@@ -1,4 +1,4 @@
-﻿using PuppeteerSharp; // Requires 'PuppeteerSharp' NuGet package
+﻿using PuppeteerSharp;
 using PuppeteerSharp.Media;
 using System.Threading.Tasks;
 
@@ -8,18 +8,22 @@ namespace Documenter
     {
         public static async Task ConvertHtmlToPdf(string htmlContent, string outputPath)
         {
-            // 1. Download Browser (One time setup)
             var browserFetcher = new BrowserFetcher();
             await browserFetcher.DownloadAsync();
 
-            // 2. Launch Headless Chrome
             using var browser = await Puppeteer.LaunchAsync(new LaunchOptions { Headless = true });
             using var page = await browser.NewPageAsync();
 
-            // 3. Set Content
             await page.SetContentAsync(htmlContent);
 
-            // 4. Print to PDF
+            // Wait for Mermaid Diagram to render (important!)
+            // We wait for the div with class 'mermaid' to exist
+            try { await page.WaitForSelectorAsync(".mermaid", new WaitForSelectorOptions { Timeout = 2000 }); }
+            catch { /* Continue if no diagram */ }
+
+            // Small buffer to ensure rendering matches styles
+            await Task.Delay(1000);
+
             await page.PdfAsync(outputPath, new PdfOptions
             {
                 Format = PaperFormat.A4,
