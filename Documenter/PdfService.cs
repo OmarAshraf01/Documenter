@@ -15,44 +15,40 @@ namespace Documenter
             var options = new LaunchOptions
             {
                 Headless = true,
-                // These timeouts control the browser startup and connection
-                ProtocolTimeout = 120000,
-                Timeout = 120000,
                 Args = new[]
                 {
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-gpu",
-                    "--disable-dev-shm-usage",
-                    "--disable-extensions",
-                    "--disable-background-networking"
+                    "--disable-dev-shm-usage"
                 }
             };
 
             using var browser = await Puppeteer.LaunchAsync(options);
             using var page = await browser.NewPageAsync();
 
-            // Set content with a generous timeout (this handles the rendering wait)
+            // 1. Load Content (Simple Load, no strict network idle check)
             await page.SetContentAsync(htmlContent, new NavigationOptions
             {
-                WaitUntil = new[] { WaitUntilNavigation.Networkidle0 },
-                Timeout = 60000 // 60 seconds
+                WaitUntil = new[] { WaitUntilNavigation.Load },
+                Timeout = 0 // Disable timeout for loading
             });
 
-            // Try to wait for mermaid diagrams
-            try
-            {
-                await page.WaitForSelectorAsync(".mermaid", new WaitForSelectorOptions { Timeout = 5000 });
-            }
-            catch { }
+            // 2. Dumb Wait (Reliable): Wait 3 seconds for Mermaid.js diagrams to draw
+            await Task.Delay(3000);
 
-            // Render PDF
-            // FIX: Removed 'Timeout = 0' because it does not exist in PdfOptions
+            // 3. Render PDF
             await page.PdfAsync(outputPath, new PdfOptions
             {
                 Format = PaperFormat.A4,
                 PrintBackground = true,
-                MarginOptions = new MarginOptions { Top = "20px", Bottom = "20px", Left = "20px", Right = "20px" }
+                MarginOptions = new MarginOptions
+                {
+                    Top = "20px",
+                    Bottom = "20px",
+                    Left = "20px",
+                    Right = "20px"
+                }
             });
         }
     }
