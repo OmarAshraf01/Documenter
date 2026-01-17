@@ -1,5 +1,6 @@
 ﻿using PuppeteerSharp;
 using PuppeteerSharp.Media;
+using System;
 using System.Threading.Tasks;
 
 namespace Documenter
@@ -11,18 +12,32 @@ namespace Documenter
             var browserFetcher = new BrowserFetcher();
             await browserFetcher.DownloadAsync();
 
-            using var browser = await Puppeteer.LaunchAsync(new LaunchOptions { Headless = true });
+            var options = new LaunchOptions
+            {
+                Headless = true,
+                Args = new[]
+                {
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-gpu", // Prevents Protocol Error
+                    "--disable-dev-shm-usage"
+                }
+            };
+
+            using var browser = await Puppeteer.LaunchAsync(options);
             using var page = await browser.NewPageAsync();
 
-            await page.SetContentAsync(htmlContent);
+            await page.SetContentAsync(htmlContent, new NavigationOptions
+            {
+                WaitUntil = new[] { WaitUntilNavigation.Networkidle0 }
+            });
 
-            // Wait for Mermaid Diagram to render (important!)
-            // We wait for the div with class 'mermaid' to exist
-            try { await page.WaitForSelectorAsync(".mermaid", new WaitForSelectorOptions { Timeout = 2000 }); }
-            catch { /* Continue if no diagram */ }
-
-            // Small buffer to ensure rendering matches styles
-            await Task.Delay(1000);
+            // Wait for diagrams (with safety timeout)
+            try
+            {
+                await page.WaitForSelectorAsync(".mermaid", new WaitForSelectorOptions { Timeout = 3000 });
+            }
+            catch { }
 
             await page.PdfAsync(outputPath, new PdfOptions
             {

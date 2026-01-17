@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Text.RegularExpressions;
 using Markdig;
 
 namespace Documenter
@@ -6,76 +7,117 @@ namespace Documenter
     public class HtmlService
     {
         private StringBuilder _content = new StringBuilder();
+
+        // --- PLACEHOLDERS ---
+        private const string TreePlaceholder = "";
+        private const string SchemaPlaceholder = "";
+        private const string DiagramPlaceholder = "";
+        private const string ReadmePlaceholder = "";
         private const string SectionBreak = "<div class='section-break'></div>";
 
         public HtmlService()
         {
-            _content.Append(@"
+            _content.Append($@"
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <script src='https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js'></script>
-                    <script>mermaid.initialize({startOnLoad:true});</script>
+                    <script>
+                        mermaid.initialize({{
+                            startOnLoad: true,
+                            theme: 'neutral',
+                            securityLevel: 'loose',
+                            flowchart: {{ useMaxWidth: false, htmlLabels: true }}
+                        }});
+                    </script>
 
                     <style>
-                        /* GLOBAL FONTS - MADE LARGER */
-                        body { font-family: 'Segoe UI', Helvetica, sans-serif; line-height: 1.6; color: #24292e; max-width: 1000px; margin: 0 auto; padding: 40px; font-size: 16px; }
+                        /* PROFESSIONAL COMPACT THEME */
+                        body {{ font-family: 'Segoe UI', Helvetica, sans-serif; line-height: 1.4; color: #24292e; max-width: 900px; margin: 0 auto; padding: 20px; font-size: 11px; }}
                         
-                        h1 { border-bottom: 1px solid #eaecef; padding-bottom: .3em; font-size: 2.25em; margin-top: 40px; }
-                        h2 { border-bottom: 1px solid #eaecef; padding-bottom: .3em; font-size: 1.75em; margin-top: 30px; }
-                        h3 { font-size: 1.5em; margin-top: 24px; }
-
-                        /* TREE VIEW - FIXED ALIGNMENT */
-                        .tree-box { 
-                            background-color: #f6f8fa; 
-                            border: 1px solid #e1e4e8; 
-                            border-radius: 6px; 
-                            padding: 16px; 
-                            margin-bottom: 30px; 
-                            font-family: 'Consolas', 'Courier New', monospace; 
-                            font-size: 14px; 
-                            line-height: 1.45; 
-                            overflow: auto; 
-                            white-space: pre; /* CRITICAL for tree alignment */
-                        }
+                        h1 {{ border-bottom: 2px solid #eaecef; padding-bottom: 5px; font-size: 22px; margin-top: 30px; color: #0366d6; }}
+                        h2 {{ border-bottom: 1px solid #eaecef; padding-bottom: 5px; font-size: 18px; margin-top: 25px; }}
+                        h3 {{ font-size: 14px; margin-top: 20px; font-weight: bold; }}
+                        
+                        /* FOLDER TREE - FORCED VISIBILITY */
+                        .tree-box {{ 
+                            background-color: #f1f8ff; 
+                            border: 1px solid #c8e1ff; 
+                            border-radius: 5px; 
+                            padding: 15px; 
+                            font-family: 'Consolas', monospace; 
+                            font-size: 11px; 
+                            white-space: pre; 
+                            overflow-x: auto; 
+                            display: block; /* Ensures it shows */
+                        }}
+                        
+                        /* DIAGRAMS */
+                        .diagram-box {{ text-align: center; margin: 20px 0; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; page-break-inside: avoid; }}
+                        .mermaid {{ display: flex; justify-content: center; }}
 
                         /* TABLES */
-                        table { border-collapse: collapse; width: 100%; margin: 20px 0; display: table; }
-                        th, td { border: 1px solid #dfe2e5; padding: 10px 16px; text-align: left; }
-                        th { background-color: #f6f8fa; font-weight: 600; }
-                        tr:nth-child(2n) { background-color: #fcfcfc; }
-
-                        /* DIAGRAMS */
-                        .diagram-box { text-align: center; margin: 30px 0; padding: 20px; border: 1px solid #eee; border-radius: 6px; }
+                        table {{ border-collapse: collapse; width: 100%; margin: 15px 0; font-size: 11px; }}
+                        th, td {{ border: 1px solid #dfe2e5; padding: 6px 12px; text-align: left; }}
+                        th {{ background-color: #f6f8fa; font-weight: 700; }}
+                        tr:nth-child(2n) {{ background-color: #fcfcfc; }}
                         
-                        /* BREAKS */
-                        .section-break { page-break-after: always; display: block; height: 1px; margin: 40px 0; }
-                        
-                        /* CODE BLOCKS */
-                        code { padding: 0.2em 0.4em; margin: 0; font-size: 85%; background-color: rgba(27,31,35,0.05); border-radius: 3px; font-family: 'Consolas', monospace; }
-                        pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
+                        .section-break {{ page-break-after: always; display: block; height: 1px; margin: 20px 0; }}
+                        .doc-section {{ margin-bottom: 30px; }}
                     </style>
                 </head>
                 <body>
+                    {TreePlaceholder}
+                    {ReadmePlaceholder}
+                    {SchemaPlaceholder}
+                    {DiagramPlaceholder}
+                    <hr/>
+                    <h1>📘 Code Analysis</h1>
             ");
         }
 
-        public void AddProjectStructure(string treeStructure)
+        // --- CRASH PROOF REPLACER ---
+        private void SafeReplace(string placeholder, string newValue)
         {
-            // Using <pre> tag ensures the tree lines don't break
-            string html = $@"
-                <h1>📂 Project Structure</h1>
-                <div class='tree-box'>
-<pre>{treeStructure}</pre>
-                </div>
-                {SectionBreak}";
+            if (string.IsNullOrEmpty(placeholder)) return;
+            if (newValue == null) newValue = "";
 
-            _content.Insert(_content.ToString().IndexOf("<body>") + 6, html);
+            // Check existence before replacing to avoid errors
+            if (_content.ToString().Contains(placeholder))
+            {
+                _content.Replace(placeholder, newValue);
+            }
         }
 
-        public void AddDiagram(string mermaidCode)
+        public void InjectProjectStructure(string treeStructure)
         {
-            string cleanCode = mermaidCode.Replace("```mermaid", "").Replace("```", "").Trim();
+            // Wrap in code block to ensure formatting is preserved
+            string html = $@"
+                <h1>📂 File Structure</h1>
+                <div class='tree-box'>{treeStructure}</div>
+                {SectionBreak}";
+            SafeReplace(TreePlaceholder, html);
+        }
+
+        public void InjectDatabaseSchema(string rawAiOutput)
+        {
+            string cleanCode = CleanMermaid(rawAiOutput);
+            if (string.IsNullOrWhiteSpace(cleanCode) || cleanCode.Contains("Error")) return;
+
+            string html = $@"
+                <div class='diagram-box'>
+                    <h2>🗄️ Database Schema (Inferred)</h2>
+                    <div class='mermaid'>
+                        {cleanCode}
+                    </div>
+                </div>
+                {SectionBreak}";
+            SafeReplace(SchemaPlaceholder, html);
+        }
+
+        public void InjectDiagram(string rawAiOutput)
+        {
+            string cleanCode = CleanMermaid(rawAiOutput);
             string html = $@"
                 <div class='diagram-box'>
                     <h2>🏗️ Architecture Diagram</h2>
@@ -84,23 +126,14 @@ namespace Documenter
                     </div>
                 </div>
                 {SectionBreak}";
-
-            // Insert after the tree view (approximate position, or just append)
-            _content.Insert(_content.ToString().IndexOf("<body>") + 6, html);
+            SafeReplace(DiagramPlaceholder, html);
         }
 
-        public void AddReadme(string markdown)
+        public void InjectReadme(string markdown)
         {
             var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
             string html = Markdown.ToHtml(markdown, pipeline);
-
-            // Wrap in a container
-            string section = $"<div class='doc-section'>{html}</div>{SectionBreak}";
-
-            // Insert after Project Structure 
-            // (Simpler approach: Append to a temporary buffer or insert at index)
-            // For now, we append it, but Form1 controls the order.
-            _content.Append(section);
+            SafeReplace(ReadmePlaceholder, $"<div class='doc-section'>{html}</div>{SectionBreak}");
         }
 
         public void AddMarkdown(string markdown)
@@ -110,17 +143,28 @@ namespace Documenter
             _content.Append($"<div class='doc-section'>{html}</div>{SectionBreak}");
         }
 
+        // --- REGEX CLEANER ---
+        private string CleanMermaid(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "graph TD;\nError[Empty Data];";
+
+            // Extract ONLY content between ```mermaid and ```
+            var match = Regex.Match(raw, @"```mermaid\s*([\s\S]*?)\s*```");
+            if (match.Success) return match.Groups[1].Value.Trim();
+
+            // Fallback: Strip fences manually
+            string cleaned = raw.Replace("```mermaid", "").Replace("```", "").Replace("mermaid", "").Trim();
+            return string.IsNullOrWhiteSpace(cleaned) ? "graph TD;\nError[Invalid Data];" : cleaned;
+        }
+
         public string GetHtml()
         {
-            string html = _content.ToString();
-
-            // Remove the very last section break to avoid a blank final page
-            if (html.EndsWith(SectionBreak))
-            {
-                html = html.Substring(0, html.Length - SectionBreak.Length);
-            }
-
-            return html + "</body></html>";
+            // Clean unused placeholders
+            SafeReplace(TreePlaceholder, "");
+            SafeReplace(SchemaPlaceholder, "");
+            SafeReplace(DiagramPlaceholder, "");
+            SafeReplace(ReadmePlaceholder, "");
+            return _content.ToString() + "</body></html>";
         }
     }
 }
