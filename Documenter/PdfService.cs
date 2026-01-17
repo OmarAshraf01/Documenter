@@ -9,7 +9,7 @@ namespace Documenter
         public static async Task ConvertHtmlToPdf(string htmlContent, string outputPath)
         {
             // 1. Download Browser (One time setup)
-            using var browserFetcher = new BrowserFetcher();
+            var browserFetcher = new BrowserFetcher();
             await browserFetcher.DownloadAsync();
 
             // 2. Launch Headless Chrome

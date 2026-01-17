@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics; // Needed to open PDF
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -10,17 +11,8 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        // 1. Valid Extensions to Analyze
-        private readonly HashSet<string> _validExtensions = new()
-        {
-            ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift", ".kt"
-        };
-
-        // 2. Folders to Ignore
-        private readonly string[] _ignoredFolders =
-        {
-            "node_modules", ".git", ".vs", "dist", "build", "venv", "__pycache__"
-        };
+        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php", ".swift", ".kt" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "dist", "build", "venv", "__pycache__", ".idea", ".vscode" };
 
         public Form1()
         {
@@ -31,97 +23,92 @@ namespace Documenter
         private async void BtnStart_Click(object sender, EventArgs e)
         {
             string repoUrl = txtUrl.Text;
-            if (string.IsNullOrWhiteSpace(repoUrl))
-            {
-                Log("❌ Please enter a valid Repository URL.");
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Enter URL."); return; }
 
             btnStart.Enabled = false;
 
-            // --- SETUP PATHS ---
+            // --- 1. SETUP PATHS ---
             string projectName = GetProjectNameFromUrl(repoUrl);
             string tempFolder = Path.GetTempPath();
             string clonesRoot = Path.Combine(tempFolder, "Doc_Clones");
             string targetFolder = Path.Combine(clonesRoot, projectName);
 
-            // Output paths on Desktop
-            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string htmlPath = Path.Combine(desktopPath, $"{projectName}_Docs.html");
-            string pdfPath = Path.Combine(desktopPath, $"{projectName}_Docs.pdf");
+            // Output files inside the CLONED REPO folder (as requested)
+            string htmlPath = Path.Combine(targetFolder, "Documentation.html");
+            string pdfPath = Path.Combine(targetFolder, "Documentation.pdf");
 
             try
             {
-                // 1. CLEANUP & CLONE
+                // --- 2. CLONE & INDEX ---
                 if (Directory.Exists(targetFolder)) GitService.DeleteDirectory(targetFolder);
                 Directory.CreateDirectory(clonesRoot);
 
                 Log($"⬇️ Cloning {projectName}...");
                 await Task.Run(() => GitService.CloneRepository(repoUrl, targetFolder));
-
-                // 2. INDEX FOR RAG (Context)
                 Log("🧠 Indexing project structure...");
                 RagService.IndexProject(targetFolder);
 
-                // 3. INITIALIZE HTML BUILDER
+                // --- 3. GENERATE PROJECT STRUCTURE (Tree) ---
+                Log("🌳 Generating File Tree...");
+                string projectTree = GenerateDirectoryTree(targetFolder);
+
+                // --- 4. ANALYZE FILES ---
                 var htmlBuilder = new HtmlService();
+                // Add Tree to HTML immediately
+                htmlBuilder.AddProjectStructure(projectTree);
+
                 var summaryForReadme = new StringBuilder();
-
-                // Get all code files (filtering out Debug/Release artifacts)
                 var files = Directory.GetFiles(targetFolder, "*.*", SearchOption.AllDirectories)
-                                     .Where(IsCodeFile)
-                                     .ToList();
+                                     .Where(IsCodeFile).ToList();
 
-                Log($"Found {files.Count} files. Starting Analysis...");
+                Log($"Found {files.Count} files. Starting Qwen Analysis...");
 
-                // 4. ANALYZE FILES LOOP
                 foreach (var file in files)
                 {
                     string fileName = Path.GetFileName(file);
                     string code = await File.ReadAllTextAsync(file);
 
-                    // Skip tiny files
                     if (code.Length < 10) continue;
 
                     Log($"Analysing {fileName}...");
 
-                    // A. Get RAG Context (Related files)
                     string context = RagService.GetContext(code);
-
-                    // B. Call AI (Qwen 1.5B)
                     string analysis = await AiAgent.AnalyzeCode(fileName, code, context);
 
-                    // C. Add to HTML Report
+                    // Add Detailed Doc
                     htmlBuilder.AddMarkdown(analysis);
 
-                    // D. Collect snippet for README generation (First 3 lines of analysis)
-                    string snippet = string.Join(" ", analysis.Split('\n').Take(3));
-                    summaryForReadme.AppendLine($"File: {fileName} - {snippet}");
+                    // Collect snippet for Readme
+                    summaryForReadme.AppendLine($"File: {fileName}\nSummary: {string.Join(" ", analysis.Split('\n').Take(3))}");
                 }
 
-                // 5. GENERATE PROFESSIONAL README
-                Log("📘 Generating User Guide / README...");
+                // --- 5. GENERATE PROFESSIONAL README ---
+                Log("📘 Writing 'How-To' Guide (README)...");
                 string readme = await AiAgent.GenerateReadme(summaryForReadme.ToString());
-
-                // Add README to the very top of the HTML
+                // Note: In HtmlService, we modified AddReadme to append it AFTER the tree but BEFORE the details.
+                // However, since we appended the Tree first, we just need to insert the Readme now.
+                // Actually, let's just append it. The HTML Service will handle order.
                 htmlBuilder.AddReadme(readme);
 
-                // 6. SAVE HTML (Intermediary Step)
+                // --- 6. SAVE & CONVERT ---
                 string finalHtml = htmlBuilder.GetHtml();
                 await File.WriteAllTextAsync(htmlPath, finalHtml);
-                Log($"✅ HTML saved to Desktop.");
+                Log($"✅ HTML saved inside repo.");
 
-                // 7. CONVERT TO PDF (Puppeteer/Chrome)
-                Log("📄 Converting HTML to PDF (this ensures perfect tables)...");
+                Log("📄 Converting to PDF...");
                 await PdfService.ConvertHtmlToPdf(finalHtml, pdfPath);
+                Log($"✅ PDF saved: {pdfPath}");
 
-                Log("🎉 Done!");
-                MessageBox.Show($"Documentation Generated!\n\n📄 PDF: {pdfPath}\n🌐 HTML: {htmlPath}", "Success");
+                // --- 7. OPEN PDF AUTOMATICALLY ---
+                Log("🚀 Opening PDF...");
+                OpenPdf(pdfPath);
+
+                MessageBox.Show($"Success!\nFiles saved in:\n{targetFolder}", "Done");
             }
             catch (Exception ex)
             {
                 Log($"❌ Error: {ex.Message}");
-                MessageBox.Show($"Critical Error: {ex.Message}", "Error");
+                MessageBox.Show(ex.Message);
             }
             finally
             {
@@ -129,48 +116,74 @@ namespace Documenter
             }
         }
 
-        // Helper: Extract project name from URL (e.g., "github.com/user/MyRepo.git" -> "MyRepo")
-        private string GetProjectNameFromUrl(string url)
+        // --- HELPER: Generate Tree Structure ---
+        private string GenerateDirectoryTree(string rootPath)
         {
-            if (string.IsNullOrWhiteSpace(url)) return "UnknownProject";
-            try
-            {
-                var uri = new Uri(url);
-                return uri.Segments.Last().Trim('/').Replace(".git", "");
-            }
-            catch
-            {
-                return "ProjectDocs";
-            }
+            var sb = new StringBuilder();
+            sb.AppendLine(Path.GetFileName(rootPath) + "/");
+            GenerateTreeRecursive(rootPath, "", sb);
+            return sb.ToString();
         }
 
-        // Helper: Check if file is valid code
+        private void GenerateTreeRecursive(string dir, string indent, StringBuilder sb)
+        {
+            try
+            {
+                var dirs = Directory.GetDirectories(dir)
+                    .Where(d => !_ignoredFolders.Contains(Path.GetFileName(d)))
+                    .ToArray();
+                var files = Directory.GetFiles(dir)
+                    .Where(IsCodeFile)
+                    .ToArray();
+
+                for (int i = 0; i < dirs.Length; i++)
+                {
+                    bool isLastDir = (i == dirs.Length - 1) && (files.Length == 0);
+                    sb.AppendLine($"{indent}{(isLastDir ? "└── " : "├── ")}{Path.GetFileName(dirs[i])}/");
+                    GenerateTreeRecursive(dirs[i], indent + (isLastDir ? "    " : "│   "), sb);
+                }
+
+                for (int i = 0; i < files.Length; i++)
+                {
+                    bool isLastFile = (i == files.Length - 1);
+                    sb.AppendLine($"{indent}{(isLastFile ? "└── " : "├── ")}{Path.GetFileName(files[i])}");
+                }
+            }
+            catch { /* Ignore permission errors */ }
+        }
+
+        // --- HELPER: Open PDF ---
+        private void OpenPdf(string path)
+        {
+            try
+            {
+                new Process
+                {
+                    StartInfo = new ProcessStartInfo(path) { UseShellExecute = true }
+                }.Start();
+            }
+            catch (Exception ex) { Log("Could not open PDF automatically: " + ex.Message); }
+        }
+
+        private string GetProjectNameFromUrl(string url)
+        {
+            try { return new Uri(url).Segments.Last().Trim('/').Replace(".git", ""); }
+            catch { return "ProjectDocs"; }
+        }
+
         private bool IsCodeFile(string path)
         {
             string ext = Path.GetExtension(path).ToLower();
             if (!_validExtensions.Contains(ext)) return false;
-
             foreach (var bad in _ignoredFolders)
-            {
-                if (path.Contains(Path.DirectorySeparatorChar + bad + Path.DirectorySeparatorChar))
-                    return false;
-            }
+                if (path.Contains(Path.DirectorySeparatorChar + bad + Path.DirectorySeparatorChar)) return false;
             return true;
         }
 
-        // Helper: Log to ListBox
         private void Log(string msg)
         {
-            // InvokeRequired check handles threading if Log is called from async Tasks
-            if (lstLog.InvokeRequired)
-            {
-                lstLog.Invoke(new Action<string>(Log), msg);
-            }
-            else
-            {
-                lstLog.Items.Add($"{DateTime.Now.ToShortTimeString()}: {msg}");
-                lstLog.TopIndex = lstLog.Items.Count - 1;
-            }
+            if (lstLog.InvokeRequired) lstLog.Invoke(new Action<string>(Log), msg);
+            else { lstLog.Items.Add($"{DateTime.Now.ToShortTimeString()}: {msg}"); lstLog.TopIndex = lstLog.Items.Count - 1; }
         }
     }
 }

@@ -1,5 +1,5 @@
 ﻿using System.Text;
-using Markdig; // Requires 'Markdig' NuGet package
+using Markdig;
 
 namespace Documenter
 {
@@ -9,45 +9,54 @@ namespace Documenter
 
         public HtmlService()
         {
-            // Add CSS Styles (Github Theme)
+            // CSS: Added styling for the Project Tree (.tree-view)
             _content.Append(@"
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <style>
-                        body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+                        body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 40px; }
                         h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
                         h2 { color: #0366d6; margin-top: 30px; border-bottom: 1px solid #eaecef; padding-bottom: 5px; }
-                        h3 { color: #24292e; margin-top: 20px; }
+                        
+                        /* Tree View Styling */
+                        .tree-box { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; font-family: 'Consolas', monospace; white-space: pre; overflow-x: auto; margin-bottom: 40px; }
+                        .tree-title { font-size: 1.2em; font-weight: bold; color: #4ec9b0; margin-bottom: 10px; display: block; }
+
+                        /* Readme Styling */
+                        .readme-box { background: #fcfcfc; border: 1px solid #e1e4e8; padding: 30px; border-radius: 6px; margin-bottom: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                        
                         table { border-collapse: collapse; width: 100%; margin: 15px 0; font-size: 14px; }
                         th, td { border: 1px solid #dfe2e5; padding: 8px 12px; text-align: left; }
                         th { background-color: #f6f8fa; font-weight: 600; }
                         tr:nth-child(even) { background-color: #f8f8f8; }
-                        code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; color: #d73a49; }
                         .section-break { page-break-after: always; display: block; height: 1px; margin: 30px 0; }
-                        .readme-box { background: #fcfcfc; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 40px; }
                     </style>
                 </head>
                 <body>
             ");
         }
 
-        public void AddMarkdown(string markdown)
+        public void AddProjectStructure(string treeStructure)
         {
-            var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
-            string html = Markdown.ToHtml(markdown, pipeline);
-            _content.Append($"<div class='doc-section'>{html}</div>");
-            _content.Append("<div class='section-break'></div>"); // Force new page in PDF
+            // Insert at the very TOP (after body)
+            _content.Insert(_content.ToString().IndexOf("<body>") + 6,
+                $"<div class='tree-box'><span class='tree-title'>📂 Project Structure</span>{treeStructure}</div><div class='section-break'></div>");
         }
 
         public void AddReadme(string markdown)
         {
             var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
             string html = Markdown.ToHtml(markdown, pipeline);
-            // Insert Readme at the VERY TOP of the body (using a placeholder technique or just prepending)
-            // For simplicity, we add it with a special class
-            _content.Insert(_content.ToString().IndexOf("<body>") + 6,
-                $"<div class='readme-box'><h1>📖 Project Guide (README)</h1>{html}</div><div class='section-break'></div>");
+            // Insert after the Tree View (calculated by finding the section break)
+            _content.Append($"<div class='readme-box'><h1>📖 User Guide (README)</h1>{html}</div><div class='section-break'></div>");
+        }
+
+        public void AddMarkdown(string markdown)
+        {
+            var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+            string html = Markdown.ToHtml(markdown, pipeline);
+            _content.Append($"<div class='doc-section'>{html}</div><div class='section-break'></div>");
         }
 
         public string GetHtml()
