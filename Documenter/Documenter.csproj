@@ -9,7 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" Version="0.44.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="PuppeteerSharp" Version="20.2.5" />
     <PackageReference Include="QuestPDF" Version="2025.12.1" />
   </ItemGroup>
 

@@ -8,73 +8,85 @@ namespace Documenter
 {
     public class AiAgent
     {
-        // Connect to Docker on Localhost
         private const string OllamaUrl = "http://localhost:11434/api/generate";
         private const string ModelName = "qwen2.5-coder:1.5b";
 
-        public static async Task<string> AnalyzeCode(string fileName, string codeContent, string context)
+        // 1. Analyze a Single Code File
+        public static async Task<string> AnalyzeCode(string fileName, string code, string context)
         {
-            using var client = new HttpClient();
-            // Qwen 7B on CPU can be slow. Set timeout to 10 minutes.
-            client.Timeout = TimeSpan.FromMinutes(10);
-
-            // Truncate the main file if it's huge
-            string safeCode = codeContent.Length > 8000 ? codeContent.Substring(0, 8000) + "...(file truncated)" : codeContent;
+            // Truncate huge files
+            if (code.Length > 6000) code = code.Substring(0, 6000) + "...[truncated]";
 
             var prompt = $@"
-                [ROLE: Senior System Architect]
+                [ROLE: Expert Technical Writer]
                 Analyze this file: '{fileName}'.
 
-                ### 📂 CODE TO ANALYZE
-                {safeCode}
+                ### 📂 CODE
+                {code}
 
-                ### 🧩 RELATED CONTEXT (References found in project)
+                ### 🧩 CONTEXT
                 {context}
 
-                ### TASK
-                1. Identify the file type (Class/Form/Interface).
-                2. Explain the logic clearly. USE THE CONTEXT to explain external calls (e.g. 'It calls donorBLL to save data').
-                3. List key methods and their purpose.
-
-                ### OUTPUT FORMAT (Markdown)
-                ## 📂 File: {fileName}
-                **Type:** [Class Type]
+                ### INSTRUCTIONS
+                1. IF '*.Designer.cs': Briefly describe UI controls only.
+                2. IF '*.cs': Explain Logic, Methods, and Data Flow.
+                3. **CRITICAL**: Format tables perfectly using Markdown.
                 
-                ### 🏗️ Logic & Structure
-                [Explanation...]
+                ### OUTPUT FORMAT (Markdown)
+                ## 📄 {fileName}
+                **Type:** [Class/Form/Interface]
 
-                ### 🔗 Relationships
-                * **Dependencies:** [List dependencies found in Context]
+                ### 📘 Summary
+                [Brief description]
 
-                ### 🛠️ Key Methods
-                * **[Method Name]**: [Explanation]
+                ### 🛠️ Key Components
+                | Name | Type | Description |
+                |---|---|---|
+                | [Name] | [Type] | [Description] |
             ";
 
-            var requestBody = new
-            {
-                model = ModelName,
-                prompt = prompt,
-                stream = false
-            };
+            return await CallOllama(prompt);
+        }
+
+        // 2. Generate the "README / User Guide"
+        public static async Task<string> GenerateReadme(string projectSummary)
+        {
+            var prompt = $@"
+                [ROLE: Product Manager]
+                Write a PROFESSIONAL README.MD and USER GUIDE for this project based on the file summaries below.
+
+                ### 📂 PROJECT FILE SUMMARIES
+                {projectSummary}
+
+                ### TASK
+                Write a Github-style README that includes:
+                1. **Project Title & Description** (Infer from the summaries).
+                2. **Features List** (What can this app do?).
+                3. **Getting Started** (How to run it?).
+                4. **Architecture Overview** (How BLL/DAL/UI connect).
+
+                Make it look professional.
+            ";
+
+            return await CallOllama(prompt);
+        }
+
+        private static async Task<string> CallOllama(string prompt)
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            var payload = new { model = ModelName, prompt = prompt, stream = false };
 
             try
             {
-                var json = JsonConvert.SerializeObject(requestBody);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(OllamaUrl,
+                    new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json"));
 
-                var response = await client.PostAsync(OllamaUrl, content);
+                if (!response.IsSuccessStatusCode) return "⚠️ AI Error.";
 
-                if (!response.IsSuccessStatusCode)
-                    return $"⚠️ AI Error: {response.StatusCode}. Is Docker running?";
-
-                string responseJson = await response.Content.ReadAsStringAsync();
-                dynamic data = JsonConvert.DeserializeObject(responseJson);
-                return data?.response ?? "No response.";
+                dynamic json = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());
+                return json.response;
             }
-            catch (Exception ex)
-            {
-                return $"❌ Connection Error: {ex.Message}. Make sure Docker is running Qwen.";
-            }
+            catch { return "⚠️ Connection Failed."; }
         }
     }
 }
