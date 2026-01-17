@@ -1,13 +1,10 @@
-﻿using System.Collections.Generic;
-using System.Text;
-using System.Text.RegularExpressions;
+﻿using System.Text;
 using Markdig;
 
 namespace Documenter
 {
     public class HtmlService
     {
-        // We store parts of the document in a specific order
         private string _treeSection = "";
         private string _diagramSection = "";
         private string _schemaSection = "";
@@ -30,26 +27,23 @@ namespace Documenter
 
         public void InjectDatabaseSchema(string rawAiOutput)
         {
-            string cleanCode = CleanMermaid(rawAiOutput);
-            if (string.IsNullOrWhiteSpace(cleanCode) || cleanCode.Contains("Error")) return;
-
+            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10) return;
             _schemaSection = $@"
                 <div class='doc-section'>
                     <div class='diagram-box'>
                         <h2>🗄️ Database Schema (ERD)</h2>
-                        <div class='mermaid'>{cleanCode}</div>
+                        <div class='mermaid'>{rawAiOutput}</div>
                     </div>
                 </div><div class='section-break'></div>";
         }
 
         public void InjectDiagram(string rawAiOutput)
         {
-            string cleanCode = CleanMermaid(rawAiOutput);
             _diagramSection = $@"
                 <div class='doc-section'>
                     <div class='diagram-box'>
                         <h2>🏗️ Architecture Diagram</h2>
-                        <div class='mermaid'>{cleanCode}</div>
+                        <div class='mermaid'>{rawAiOutput}</div>
                     </div>
                 </div><div class='section-break'></div>";
         }
@@ -70,10 +64,7 @@ namespace Documenter
 
         public string GetHtml()
         {
-            // Combine all parts in the correct order
             var sb = new StringBuilder();
-
-            // 1. Header
             sb.Append(@"
                 <!DOCTYPE html>
                 <html>
@@ -84,6 +75,7 @@ namespace Documenter
                             startOnLoad: true,
                             theme: 'neutral',
                             securityLevel: 'loose',
+                            maxEdges: 500,  // Allow more connections
                             flowchart: { useMaxWidth: false, htmlLabels: true }
                         });
                     </script>
@@ -104,25 +96,14 @@ namespace Documenter
                 </head>
                 <body>");
 
-            // 2. Inject Content Ordered
             sb.Append(_treeSection);
             sb.Append(_diagramSection);
             sb.Append(_schemaSection);
             sb.Append(_readmeSection);
             sb.Append(_codeAnalysisSection);
 
-            // 3. Footer
             sb.Append("</body></html>");
-
             return sb.ToString();
-        }
-
-        private string CleanMermaid(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return "graph TD;\nError[Empty Data];";
-            var match = Regex.Match(raw, @"```mermaid\s*([\s\S]*?)\s*```");
-            if (match.Success) return match.Groups[1].Value.Trim();
-            return raw.Replace("```mermaid", "").Replace("```", "").Replace("mermaid", "").Trim();
         }
     }
 }

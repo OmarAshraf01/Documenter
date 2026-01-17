@@ -15,40 +15,28 @@ namespace Documenter
             var options = new LaunchOptions
             {
                 Headless = true,
-                Args = new[]
-                {
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-gpu",
-                    "--disable-dev-shm-usage"
-                }
+                Args = new[] { "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage" }
             };
 
             using var browser = await Puppeteer.LaunchAsync(options);
             using var page = await browser.NewPageAsync();
 
-            // 1. Load Content (Simple Load, no strict network idle check)
+            // Load Content
             await page.SetContentAsync(htmlContent, new NavigationOptions
             {
                 WaitUntil = new[] { WaitUntilNavigation.Load },
-                Timeout = 0 // Disable timeout for loading
+                Timeout = 0
             });
 
-            // 2. Dumb Wait (Reliable): Wait 3 seconds for Mermaid.js diagrams to draw
+            // RELIABLE FIX: Wait 3 seconds for animations/Mermaid to finish
             await Task.Delay(3000);
 
-            // 3. Render PDF
+            // Render
             await page.PdfAsync(outputPath, new PdfOptions
             {
                 Format = PaperFormat.A4,
                 PrintBackground = true,
-                MarginOptions = new MarginOptions
-                {
-                    Top = "20px",
-                    Bottom = "20px",
-                    Left = "20px",
-                    Right = "20px"
-                }
+                MarginOptions = new MarginOptions { Top = "20px", Bottom = "20px", Left = "20px", Right = "20px" }
             });
         }
     }
