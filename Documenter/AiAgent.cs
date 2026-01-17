@@ -13,11 +13,12 @@ namespace Documenter
 
         public static async Task<string> AnalyzeCode(string fileName, string code, string context)
         {
-            if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
+            // Truncate huge files
+            if (code.Length > 6000) code = code.Substring(0, 6000) + "...[truncated]";
 
             var prompt = $@"
-                [ROLE: Expert Technical Writer]
-                Analyze file: '{fileName}'.
+                [ROLE: Senior Technical Writer]
+                Analyze this file: '{fileName}'.
 
                 ### 📂 CODE
                 {code}
@@ -25,19 +26,17 @@ namespace Documenter
                 ### 🧩 CONTEXT
                 {context}
 
-                ### RULES
-                1. Use **Standard Markdown Tables** for properties/methods. 
-                   - Format: | Name | Type | Description |
-                   - ALWAYS include a blank line before the table.
-                2. If '*.Designer.cs': Only summarize UI controls.
-                3. If '*.cs': Explain Logic.
+                ### INSTRUCTIONS
+                1. If this is a UI file (*.Designer.cs), ONLY list the controls (Buttons, Labels).
+                2. If this is Logic (*.cs), explain the functionality.
+                3. **FORMATTING**: Use Markdown Tables for properties/methods.
 
-                ### OUTPUT FORMAT
+                ### OUTPUT TEMPLATE
                 ## 📄 {fileName}
-                **Type:** [Class/Form]
+                **Type:** [Class/Form/Interface]
 
                 ### 📘 Summary
-                [Brief description]
+                [Brief summary]
 
                 ### 🛠️ Key Components
                 | Name | Type | Description |
@@ -52,36 +51,42 @@ namespace Documenter
         {
             var prompt = $@"
                 [ROLE: System Architect]
-                Based on these file summaries, generate a **Mermaid.js Class Diagram** representing the relationship between BLL, DAL, and Forms.
+                Generate a **Mermaid.js Class Diagram** code block based on these files.
+                Focus on the BLL (Business Logic) and DAL (Data Access) relationships.
 
                 ### FILES
                 {projectSummary}
 
                 ### OUTPUT
-                Return ONLY the mermaid code. Start with 'classDiagram'.
-                Example:
-                classDiagram
-                  class LoginBLL
-                  class LoginDAL
-                  LoginBLL --> LoginDAL
+                ONLY return the mermaid code starting with 'classDiagram'. Do not add explanations.
             ";
             return await CallOllama(prompt);
         }
 
-        public static async Task<string> GenerateReadme(string projectSummary)
+        public static async Task<string> GenerateReadme(string projectSummary, string repoUrl)
         {
             var prompt = $@"
-                [ROLE: Product Manager]
-                Write a concise README.MD for this project.
-                
-                ### FILES
+                [ROLE: Senior DevOps Engineer]
+                Write a **PROFESSIONAL DEPLOYMENT GUIDE & README** for this C# project.
+
+                ### REPOSITORY URL
+                {repoUrl}
+
+                ### PROJECT CONTEXT
                 {projectSummary}
 
-                ### FORMAT
-                # Project Name
-                ## Description
-                ## Features
-                ## How to Run
+                ### REQUIRED SECTIONS (Use Markdown):
+                1. **Project Title & Description**: Professional summary.
+                2. **Key Features**: Bullet points of what it does.
+                3. **Prerequisites**: What needs to be installed? (e.g., .NET SDK, SQL Server, Visual Studio).
+                4. **🚀 Deployment & Setup Guide** (Crucial Section):
+                   - Step 1: Clone the Repo (`git clone {repoUrl}`)
+                   - Step 2: Database Setup (Explain connection strings configuration).
+                   - Step 3: Restore Dependencies (`dotnet restore`).
+                   - Step 4: Run the Application.
+                5. **Architecture**: Brief mention of the BLL/DAL layers.
+
+                Make it look like a top-tier GitHub repository README.
             ";
             return await CallOllama(prompt);
         }

@@ -67,7 +67,7 @@
             btnBrowse.TabIndex = 3;
             btnBrowse.Text = "Browse";
             btnBrowse.UseVisualStyleBackColor = true;
-            btnBrowse.Click += button1_Click;
+            btnBrowse.Click += BtnBrowse_Click;
             // 
             // lblSelectedPath
             // 
