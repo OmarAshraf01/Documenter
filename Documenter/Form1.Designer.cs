@@ -109,7 +109,7 @@
             Controls.Add(txtUrl);
             Name = "Form1";
             Text = "AI Documenter";
-            Load += Form1_Load;
+            this.Load += Form1_Load;
             ResumeLayout(false);
             PerformLayout();
         }

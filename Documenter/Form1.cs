@@ -11,23 +11,18 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".c", ".h", ".go", ".rb", ".php" };
-        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", ".idea" };
+        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".php", ".go" };
+        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", "debug" };
         private string _selectedBasePath = string.Empty;
         private string _currentLogFile = string.Empty;
 
         public Form1()
         {
             InitializeComponent();
-            btnStart.Click -= BtnStart_Click; btnStart.Click += BtnStart_Click;
-            btnBrowse.Click -= BtnBrowse_Click; btnBrowse.Click += BtnBrowse_Click;
-            this.Load -= Form1_Load; this.Load += Form1_Load;
-
             _selectedBasePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             if (lblSelectedPath != null) lblSelectedPath.Text = _selectedBasePath;
+            btnStart.Click += BtnStart_Click;
         }
-
-        private void Form1_Load(object sender, EventArgs e) { if (lblStatus != null) lblStatus.Text = "Ready."; }
 
         private void BtnBrowse_Click(object sender, EventArgs e)
         {
@@ -40,14 +35,17 @@ namespace Documenter
                 }
             }
         }
-
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            if (lblStatus != null) lblStatus.Text = "Ready.";
+        }
         private async void BtnStart_Click(object sender, EventArgs e)
         {
             string repoUrl = txtUrl.Text;
-            if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Error: Enter a URL."); return; }
+            if (string.IsNullOrWhiteSpace(repoUrl)) { Log("❌ Error: Please enter a Git URL."); return; }
 
-            btnStart.Enabled = false; btnBrowse.Enabled = false;
-            if (progressBar1 != null) progressBar1.Value = 0;
+            btnStart.Enabled = false;
+            btnBrowse.Enabled = false;
 
             string projectName = GetProjectNameFromUrl(repoUrl);
             string projectRoot = Path.Combine(_selectedBasePath, projectName);
@@ -58,90 +56,112 @@ namespace Documenter
 
             try
             {
+                // 1. Setup Folders
                 if (Directory.Exists(codeFolder)) GitService.DeleteDirectory(codeFolder);
                 Directory.CreateDirectory(codeFolder);
                 Directory.CreateDirectory(docsFolder);
                 _currentLogFile = Path.Combine(docsFolder, "log.txt");
 
-                Log("⬇️ Cloning...");
+                // 2. Clone & Index
+                Log("⬇️ Cloning Repository...");
                 await Task.Run(() => GitService.CloneRepository(repoUrl, codeFolder));
-                Log("🧠 Indexing...");
+
+                Log("🧠 Indexing Codebase...");
                 RagService.IndexProject(codeFolder);
 
+                // 3. Prepare Analysis
                 var htmlBuilder = new HtmlService();
                 var summaryForAi = new StringBuilder();
-                var dalSummary = new StringBuilder(); // Collects SQL/DAL info
+                var dbContextForErd = new StringBuilder();
 
                 var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories).Where(IsCodeFile).ToList();
+                int totalFiles = files.Count;
+                if (progressBar1 != null) progressBar1.Maximum = totalFiles;
 
-                // 1. INJECT TREE
+                // --- FEATURE: Folder Structure on First Page ---
+                Log("🌳 Generating Folder Structure...");
                 htmlBuilder.InjectProjectStructure(GenerateDirectoryTree(codeFolder));
 
-                if (progressBar1 != null) progressBar1.Maximum = files.Count;
-                int processed = 0;
-
-                foreach (var file in files)
+                // 4. Analyze Files Loop
+                for (int i = 0; i < totalFiles; i++)
                 {
-                    processed++;
+                    string file = files[i];
                     string name = Path.GetFileName(file);
-                    if (progressBar1 != null) progressBar1.Value = processed;
-                    if (lblStatus != null) lblStatus.Text = $"Analyzing: {name}";
-                    Log($"Analyzing: {name}...");
+
+                    // --- FEATURE: Log Numbering ---
+                    string progressMsg = $"Analyzing ({i + 1}/{totalFiles}): {name}";
+                    Log(progressMsg);
+                    if (lblStatus != null) lblStatus.Text = progressMsg;
+                    if (progressBar1 != null) progressBar1.Value = i + 1;
 
                     string code = await File.ReadAllTextAsync(file);
+
+                    // Basic check to skip empty files
                     if (code.Length > 10)
                     {
                         string context = RagService.GetContext(code);
                         string analysis = await AiAgent.AnalyzeCode(name, code, context);
                         htmlBuilder.AddMarkdown(analysis);
 
+                        // Add to Project Summary for README generation
                         string snippet = string.Join("\n", code.Split('\n').Take(15));
                         summaryForAi.AppendLine($"File: {name}\n{snippet}\n");
 
-                        // Collect DB Logic for Schema
-                        if (name.ToLower().Contains("dal") || code.ToLower().Contains("select"))
+                        // --- FEATURE: Intelligent ERD Detection ---
+                        // Only collect code for ERD if it looks like a Database Model or DAL
+                        string lowerName = name.ToLower();
+                        if (lowerName.Contains("dal") || lowerName.Contains("model") || lowerName.Contains("entity") || lowerName.Contains("context") || lowerName.Contains("dto"))
                         {
-                            dalSummary.AppendLine($"--- {name} ---\n{code}\n");
+                            dbContextForErd.AppendLine($"--- {name} ---\n{code}\n");
                         }
                     }
                 }
 
-                // 2. DIAGRAMS
-                Log("📊 Architecture Diagram...");
+                // 5. Generate Architecture Diagram
+                Log("📊 Generating Architecture Diagram...");
                 htmlBuilder.InjectDiagram(await AiAgent.GenerateDiagram(summaryForAi.ToString()));
 
-                // 3. DATABASE SCHEMA
-                if (dalSummary.Length > 0)
+                // 6. Generate ERD (Conditional)
+                // Only generates if we found database-related files
+                if (dbContextForErd.Length > 50)
                 {
-                    Log("🗄️ Database Schema...");
-                    htmlBuilder.InjectDatabaseSchema(await AiAgent.GenerateDatabaseSchema(dalSummary.ToString()));
+                    Log("🗄️ Database Detected. Generating ER Diagram...");
+                    htmlBuilder.InjectDatabaseSchema(await AiAgent.GenerateDatabaseSchema(dbContextForErd.ToString()));
+                }
+                else
+                {
+                    Log("ℹ️ No Database logic detected. Skipping ERD.");
                 }
 
-                // 4. README
-                Log("📘 Readme...");
+                // 7. Generate README
+                Log("📘 Generating README & How-To-Use...");
                 htmlBuilder.InjectReadme(await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl));
 
-                // 5. SAVE & PDF
-                Log("📄 Rendering PDF...");
+                // 8. Render Final PDF
+                Log("📄 Rendering PDF (This may take a moment)...");
                 string html = htmlBuilder.GetHtml();
                 await File.WriteAllTextAsync(htmlPath, html);
                 await PdfService.ConvertHtmlToPdf(html, pdfPath);
 
-                Log("🚀 Done!");
+                Log("🚀 Success! Documentation Generated.");
                 if (lblStatus != null) lblStatus.Text = "Complete!";
+
+                // Open the PDF automatically
                 Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
                 Log($"❌ Error: {ex.Message}");
-                MessageBox.Show(ex.Message);
+                MessageBox.Show($"An error occurred: {ex.Message}");
             }
             finally
             {
-                btnStart.Enabled = true; btnBrowse.Enabled = true;
+                btnStart.Enabled = true;
+                btnBrowse.Enabled = true;
             }
         }
 
+        // Helper: Generate Tree string
         private string GenerateDirectoryTree(string root)
         {
             var sb = new StringBuilder();
