@@ -17,6 +17,7 @@ namespace Documenter
         {
             if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
 
+            // Note: Doubled braces {{ }} escape them so they appear as text in the string
             var prompt = $@"
                 [ROLE: Senior Technical Writer]
                 Analyze this source file: '{fileName}'.
@@ -60,6 +61,7 @@ namespace Documenter
 
         public static async Task<string> GenerateDatabaseSchema(string dalCode)
         {
+            // FIX: Curly braces are doubled {{ }} to prevent compiler errors
             var prompt = $@"
                 [ROLE: Database Architect]
                 Infer the Database Schema (ERD) from this code.
@@ -69,7 +71,7 @@ namespace Documenter
 
                 ### RULES
                 - Start with 'erDiagram'.
-                - Use STRICT format: 'EntityName {{ type name }}'.
+                - Use STRICT format: 'EntityName {{ type name }}'. 
                 - **CRITICAL: NO SPACES in Entity names** (Use 'User_Table', NOT 'User Table').
                 - Infer relationships if possible (e.g., User ||--o{{ Order).
                 - Return ONLY valid Mermaid code.
@@ -127,7 +129,7 @@ namespace Documenter
 
                 string result = responseToken.ToString();
 
-                // CLEANUP: Remove markdown fences to prevent rendering issues
+                // CLEANUP: Remove markdown fences
                 return Regex.Replace(result, @"^```[a-z]*\s*|\s*```$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
             }
             catch { return "Error: AI Connection Failed."; }

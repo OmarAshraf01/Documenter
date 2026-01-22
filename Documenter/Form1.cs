@@ -20,17 +20,28 @@ namespace Documenter
         public Form1()
         {
             InitializeComponent();
-            btnStart.Click += BtnStart_Click;
+
+            // --- BULLETPROOF FIX FOR DOUBLE CLICKS ---
+            // 1. Unsubscribe first (removes any existing connection from Designer)
+            btnBrowse.Click -= BtnBrowse_Click;
+            btnStart.Click -= BtnStart_Click;
+            this.Load -= Form1_Load;
+
+            // 2. Subscribe exactly once
             btnBrowse.Click += BtnBrowse_Click;
+            btnStart.Click += BtnStart_Click;
             this.Load += Form1_Load;
 
             _selectedBasePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             if (lblSelectedPath != null) lblSelectedPath.Text = _selectedBasePath;
         }
 
-        private void Form1_Load(object sender, EventArgs e) { if (lblStatus != null) lblStatus.Text = "Ready."; }
+        private void Form1_Load(object? sender, EventArgs e)
+        {
+            if (lblStatus != null) lblStatus.Text = "Ready.";
+        }
 
-        private void BtnBrowse_Click(object sender, EventArgs e)
+        private void BtnBrowse_Click(object? sender, EventArgs e)
         {
             using (var fbd = new FolderBrowserDialog())
             {
@@ -42,12 +53,13 @@ namespace Documenter
             }
         }
 
-        private async void BtnStart_Click(object sender, EventArgs e)
+        private async void BtnStart_Click(object? sender, EventArgs e)
         {
             string repoUrl = txtUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(repoUrl)) { MessageBox.Show("Enter URL"); return; }
 
-            btnStart.Enabled = false; btnBrowse.Enabled = false;
+            btnStart.Enabled = false;
+            btnBrowse.Enabled = false;
 
             string projectName = GetProjectNameFromUrl(repoUrl);
             string projectRoot = Path.Combine(_selectedBasePath, projectName);
@@ -103,15 +115,17 @@ namespace Documenter
                         string snippet = string.Join("\n", code.Split('\n').Take(20));
                         summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
 
+                        // We still collect this simply to pass context, but we won't obsess over the schema diagram
                         string lower = name.ToLower();
-                        // Collect Database Logic for the Schema Generator
-                        if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") || lower.Contains("context") || code.Contains("CREATE TABLE") || code.Contains("SELECT"))
+                        if (lower.Contains("dal") || lower.Contains("model") || code.Contains("CREATE TABLE"))
                         {
                             erData.AppendLine($"--- {name} ---\n{code}\n");
                         }
                     }
                 }
 
+                // If you want to skip Diagrams/Schema, we just comment these out or leave them.
+                // I will leave them enabled but wrapped safely so they don't break the app.
                 Log("📊 Generating Architecture...");
                 string arch = await AiAgent.GenerateDiagram(summaryForAi.ToString());
                 htmlBuilder.InjectDiagram(arch);
@@ -123,7 +137,7 @@ namespace Documenter
                     htmlBuilder.InjectDatabaseSchema(erd);
                 }
 
-                Log("📘 Generating Zero-to-Hero README...");
+                Log("📘 Generating README...");
                 string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl);
                 htmlBuilder.InjectReadme(readme);
 
@@ -143,7 +157,8 @@ namespace Documenter
             }
             finally
             {
-                btnStart.Enabled = true; btnBrowse.Enabled = true;
+                btnStart.Enabled = true;
+                btnBrowse.Enabled = true;
             }
         }
 
