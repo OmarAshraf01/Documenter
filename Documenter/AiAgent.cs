@@ -44,28 +44,22 @@ namespace Documenter
             return await CallOllama(prompt);
         }
 
-        // --- NEW: Text-Based Database Analysis (No Diagrams) ---
         public static async Task<string> AnalyzeDatabaseLogic(string dalCode)
         {
             var prompt = $@"
                 [ROLE: Senior Backend Developer]
                 Analyze the provided code snippets (DAL/SQL).
-                
                 Create a **Markdown Table** summarizing the database entities.
-                
                 ### CODE SNIPPETS
                 {dalCode}
-
                 ### INSTRUCTIONS
                 1. Identify Table Names/Entities.
                 2. Describe what they store.
-                3. **Do NOT draw diagrams.** Output text/table only.
+                3. Do NOT draw diagrams. Output text/table only.
                 4. If no database logic is found, return 'N/A'.
-
                 ### OUTPUT FORMAT
                 ## 🗄️ Database Structure
                 The system appears to use the following data structure:
-
                 | Entity / Table | Inferred Fields | Purpose |
                 |---|---|---|
                 | [Name] | [Fields] | [Description] |
@@ -78,29 +72,21 @@ namespace Documenter
             var prompt = $@"
                 [ROLE: Senior Developer]
                 Write a professional README.md.
-
                 ### REPO URL
                 {repoUrl}
                 ### CODE SUMMARY
                 {projectSummary}
-
                 ### STRICT OUTPUT RULES
                 1. Markdown only.
-                2. NO conversational text ('Here is the readme').
-                3. NO 'Feel free to ask questions'.
-
+                2. NO conversational text.
                 ### FORMAT
                 # [Project Name]
-
                 ## 📖 Description
                 [Professional description]
-
                 ## ✨ Key Features
                 [Bullet points]
-
                 ## 🛠️ Tech Stack
                 [List]
-
                 ## 🚀 Setup
                 1. Clone: `git clone {repoUrl}`
                 2. [Step 2]
@@ -111,7 +97,7 @@ namespace Documenter
 
         private static async Task<string> CallOllama(string prompt)
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
             var payload = new { model = ModelName, prompt = prompt, stream = false };
 
             try
@@ -119,21 +105,18 @@ namespace Documenter
                 var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
                 var response = await client.PostAsync(OllamaUrl, content);
 
-                if (!response.IsSuccessStatusCode) return "AI Error";
+                if (!response.IsSuccessStatusCode) return "AI Error: " + response.ReasonPhrase;
 
                 var contentString = await response.Content.ReadAsStringAsync();
                 JObject? json = JsonConvert.DeserializeObject<JObject>(contentString);
-                if (json == null) return "";
+                if (json == null) return "AI Error: Empty AI response.";
 
                 JToken? responseToken = json["response"];
-                if (responseToken == null) return "";
+                if (responseToken == null) return "AI Error: Missing response field.";
 
                 string result = responseToken.ToString();
-
-                // Cleanup conversational filler
                 result = Regex.Replace(result, @"^Here is.*?:", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
                 result = Regex.Replace(result, @"Note:.*", "", RegexOptions.IgnoreCase);
-
                 return Regex.Replace(result, @"^```[a-z]*\s*|\s*```$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
             }
             catch { return "Error: AI Connection Failed."; }
