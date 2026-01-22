@@ -11,7 +11,6 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        // Added .sql, .xml, .config
         private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".sql", ".xml", ".config" };
         private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", "debug", "lib", "packages" };
 
@@ -74,12 +73,11 @@ namespace Documenter
                 var erData = new StringBuilder();
 
                 var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories)
-                                     .Where(IsCodeFile)
-                                     .OrderBy(f => f) // Order alphabetically
-                                     .ToList();
+                                         .Where(IsCodeFile)
+                                         .OrderBy(f => f)
+                                         .ToList();
 
                 Log("🌳 Generating Folder Structure...");
-                // Improved Tree Logic
                 htmlBuilder.InjectProjectStructure(GenerateTreeRecursively(codeFolder, ""));
 
                 int total = files.Count;
@@ -94,7 +92,6 @@ namespace Documenter
                     Log(msg);
                     if (lblStatus != null) lblStatus.Text = msg;
                     if (progressBar1 != null) progressBar1.Value = i + 1;
-                    await Task.Delay(10); // UI Refresh
 
                     string code = await File.ReadAllTextAsync(file);
                     if (code.Length > 10)
@@ -107,7 +104,8 @@ namespace Documenter
                         summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
 
                         string lower = name.ToLower();
-                        if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") || lower.Contains("context") || code.Contains("CREATE TABLE"))
+                        // Collect Database Logic for the Schema Generator
+                        if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") || lower.Contains("context") || code.Contains("CREATE TABLE") || code.Contains("SELECT"))
                         {
                             erData.AppendLine($"--- {name} ---\n{code}\n");
                         }
@@ -125,7 +123,7 @@ namespace Documenter
                     htmlBuilder.InjectDatabaseSchema(erd);
                 }
 
-                Log("📘 Generating README...");
+                Log("📘 Generating Zero-to-Hero README...");
                 string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl);
                 htmlBuilder.InjectReadme(readme);
 
@@ -149,7 +147,6 @@ namespace Documenter
             }
         }
 
-        // Recursive tree generation for better visualization
         private string GenerateTreeRecursively(string dir, string indent)
         {
             StringBuilder sb = new StringBuilder();

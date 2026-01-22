@@ -5,6 +5,7 @@ namespace Documenter
 {
     public class HtmlService
     {
+        // Store sections separately to avoid search/replace crashes
         private string _treeSection = "";
         private string _diagramSection = "";
         private string _schemaSection = "";
@@ -20,7 +21,7 @@ namespace Documenter
         {
             _treeSection = $@"
                 <div class='doc-section'>
-                    <h1>📂 Project Structure</h1>
+                    <h1>📂 Project Folder Structure</h1>
                     <div class='tree-box'>{treeStructure}</div>
                 </div><div class='section-break'></div>";
         }
@@ -28,10 +29,11 @@ namespace Documenter
         public void InjectDatabaseSchema(string rawAiOutput)
         {
             if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10) return;
+
             _schemaSection = $@"
                 <div class='doc-section'>
                     <div class='diagram-box'>
-                        <h2>🗄️ Database Schema (ERD)</h2>
+                        <h2>🗄️ Suggested Database Schema</h2>
                         <div class='mermaid'>{rawAiOutput}</div>
                     </div>
                 </div><div class='section-break'></div>";
@@ -69,13 +71,13 @@ namespace Documenter
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <script src='https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js'></script>
+                    <script src='[https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js](https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js)'></script>
                     <script>
                         mermaid.initialize({
                             startOnLoad: true,
                             theme: 'neutral',
                             securityLevel: 'loose',
-                            maxEdges: 500,  // Allow more connections
+                            maxEdges: 500,
                             flowchart: { useMaxWidth: false, htmlLabels: true }
                         });
                     </script>
@@ -96,6 +98,7 @@ namespace Documenter
                 </head>
                 <body>");
 
+            // Append sections in logical order
             sb.Append(_treeSection);
             sb.Append(_diagramSection);
             sb.Append(_schemaSection);

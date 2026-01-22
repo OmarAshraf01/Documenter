@@ -11,12 +11,10 @@ namespace Documenter
     public class AiAgent
     {
         private const string OllamaUrl = "http://localhost:11434/api/generate";
-        // Ensure you have this model: ollama pull qwen2.5-coder:1.5b
         private const string ModelName = "qwen2.5-coder:1.5b";
 
         public static async Task<string> AnalyzeCode(string fileName, string code, string context)
         {
-            // Increased limit to capture more context
             if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
 
             var prompt = $@"
@@ -43,13 +41,10 @@ namespace Documenter
 
         public static async Task<string> GenerateDiagram(string projectSummary)
         {
-            // CHANGED: Requests a 'graph TD' (Flowchart) instead of 'classDiagram'.
-            // This prevents the 'messy spiderweb' look and creates organized layers.
             var prompt = $@"
                 [ROLE: System Architect]
                 Create a High-Level Layered Architecture Diagram using Mermaid.js.
-                Group the components into layers: UI (Forms), BLL (Logic), and DAL (Data).
-
+                
                 ### FILES
                 {projectSummary}
 
@@ -65,7 +60,6 @@ namespace Documenter
 
         public static async Task<string> GenerateDatabaseSchema(string dalCode)
         {
-            // CHANGED: Added STRICT rules to prevent the 'Syntax error in text' bug.
             var prompt = $@"
                 [ROLE: Database Architect]
                 Infer the Database Schema (ERD) from this code.
@@ -75,10 +69,11 @@ namespace Documenter
 
                 ### RULES
                 - Start with 'erDiagram'.
-                - Use STRICT format: 'EntityName {{type name }}'.
+                - Use STRICT format: 'EntityName {{ type name }}'.
                 - **CRITICAL: NO SPACES in Entity names** (Use 'User_Table', NOT 'User Table').
-                - Infer relationships (e.g., User ||--o{{Order}}).
+                - Infer relationships if possible (e.g., User ||--o{{ Order).
                 - Return ONLY valid Mermaid code.
+                - NO markdown fences.
             ";
             return await CallOllama(prompt);
         }
@@ -87,7 +82,7 @@ namespace Documenter
         {
             var prompt = $@"
                 [ROLE: Senior Developer Advocate]
-                Write a comprehensive README.md.
+                Write a 'Zero to Hero' README.md for a complete beginner.
 
                 ### REPO URL
                 {repoUrl}
@@ -98,9 +93,15 @@ namespace Documenter
                 # [Project Name]
                 ## 📖 Overview
                 ## ✨ Features
-                ## 🏗️ Architecture (UI -> BLL -> DAL)
-                ## 🚀 Setup & Usage
+                ## 🏗️ Architecture
                 ## 🛠️ Tech Stack
+                
+                ## 🚀 Zero to Hero: How to Run (Step-by-Step)
+                *Write this section for a total beginner.*
+                1. **Prerequisites**: What to install (VS, SQL Server, .NET SDK).
+                2. **Cloning**: `git clone {repoUrl}`
+                3. **Database Setup**: How to create the DB and update connection strings.
+                4. **Running**: How to build and start the app.
             ";
             return await CallOllama(prompt);
         }
@@ -108,8 +109,8 @@ namespace Documenter
         private static async Task<string> CallOllama(string prompt)
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-
             var payload = new { model = ModelName, prompt = prompt, stream = false };
+
             try
             {
                 var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
@@ -122,12 +123,11 @@ namespace Documenter
                 if (json == null) return "AI Error: Empty AI response.";
 
                 JToken? responseToken = json["response"];
-                if (responseToken == null) return "AI Error: AI response missing 'response' field.";
+                if (responseToken == null) return "AI Error: Missing response field.";
 
                 string result = responseToken.ToString();
 
-                // CLEANUP: Automatically remove markdown fences (```mermaid ... ```) 
-                // This ensures the HTML renderer doesn't break if the AI ignores the "no fences" rule.
+                // CLEANUP: Remove markdown fences to prevent rendering issues
                 return Regex.Replace(result, @"^```[a-z]*\s*|\s*```$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
             }
             catch { return "Error: AI Connection Failed."; }

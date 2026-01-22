@@ -15,7 +15,13 @@ namespace Documenter
             var options = new LaunchOptions
             {
                 Headless = true,
-                Args = new[] { "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage" }
+                Args = new[]
+                {
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage"
+                }
             };
 
             using var browser = await Puppeteer.LaunchAsync(options);
@@ -24,12 +30,15 @@ namespace Documenter
             // Load Content
             await page.SetContentAsync(htmlContent, new NavigationOptions
             {
-                WaitUntil = new[] { WaitUntilNavigation.Load },
-                Timeout = 0
+                WaitUntil = new[] { WaitUntilNavigation.Load, WaitUntilNavigation.Networkidle0 },
+                Timeout = 60000 // 60s timeout for heavy pages
             });
 
-            // RELIABLE FIX: Wait 3 seconds for animations/Mermaid to finish
-            await Task.Delay(3000);
+            // Wait specifically for Mermaid to render the SVG
+            try { await page.WaitForSelectorAsync(".mermaid svg", new WaitForSelectorOptions { Timeout = 5000 }); } catch { }
+
+            // Buffer for layout settlement
+            await Task.Delay(2000);
 
             // Render
             await page.PdfAsync(outputPath, new PdfOptions
