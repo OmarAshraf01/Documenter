@@ -11,6 +11,7 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
+        // 1. Class-Level Variables
         private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".sql", ".xml", ".config", ".html", ".css" };
         private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", "debug", "lib", "packages" };
 
@@ -22,7 +23,7 @@ namespace Documenter
         {
             InitializeComponent();
 
-            // Fix double subscriptions
+            // Fix double-click event subscription bugs
             btnBrowse.Click -= BtnBrowse_Click;
             btnStart.Click -= BtnStart_Click;
             this.Load -= Form1_Load;
@@ -54,16 +55,11 @@ namespace Documenter
 
         private async void BtnStart_Click(object? sender, EventArgs e)
         {
-            // 1. Define these variables at the very top so they are visible everywhere
+            // --- SCOPE FIX: Define these at the very top of the method ---
             string repoUrl = txtUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(repoUrl)) { MessageBox.Show("Enter URL"); return; }
 
-            btnStart.Enabled = false;
-            btnBrowse.Enabled = false;
-
-            _realTimeWindow = new RealTimeView();
-            _realTimeWindow.Show();
-
+            // Define paths immediately so they are visible in 'finally' or lower blocks if needed
             string projectName = GetProjectNameFromUrl(repoUrl);
             string projectRoot = Path.Combine(_selectedBasePath, projectName);
             string codeFolder = Path.Combine(projectRoot, "SourceCode");
@@ -71,8 +67,16 @@ namespace Documenter
             string htmlPath = Path.Combine(docsFolder, "Documentation.html");
             string pdfPath = Path.Combine(docsFolder, "Documentation.pdf");
 
+            btnStart.Enabled = false;
+            btnBrowse.Enabled = false;
+
+            // Launch Real-Time Window
+            _realTimeWindow = new RealTimeView();
+            _realTimeWindow.Show();
+
             try
             {
+                // Directory Setup
                 if (Directory.Exists(codeFolder)) GitService.DeleteDirectory(codeFolder);
                 Directory.CreateDirectory(codeFolder);
                 Directory.CreateDirectory(docsFolder);
@@ -88,12 +92,13 @@ namespace Documenter
                 var summaryForAi = new StringBuilder();
                 var dbData = new StringBuilder();
 
+                // Get Files
                 var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories)
                                         .Where(IsCodeFile)
                                         .OrderBy(f => f)
                                         .ToList();
 
-                // Define 'total' here
+                // --- SCOPE FIX: Define 'total' before using it ---
                 int total = files.Count;
 
                 Log("🌳 Generating Folder Structure...");
@@ -101,12 +106,13 @@ namespace Documenter
 
                 if (progressBar1 != null) { progressBar1.Maximum = total; progressBar1.Value = 0; }
 
+                // --- MAIN LOOP ---
                 for (int i = 0; i < total; i++)
                 {
                     string file = files[i];
                     string name = Path.GetFileName(file);
 
-                    // 2. Define 'code' INSIDE the loop, but before checking it
+                    // --- SCOPE FIX: Define 'code' inside the loop, before checking it ---
                     string code = await File.ReadAllTextAsync(file);
 
                     if (string.IsNullOrWhiteSpace(code)) continue;
@@ -116,17 +122,17 @@ namespace Documenter
                     if (lblStatus != null) lblStatus.Text = msg;
                     if (progressBar1 != null) progressBar1.Value = i + 1;
 
-                    // Analysis
+                    // 1. Analyze Code
                     string context = RagService.GetContext(code);
                     string analysis = await AiAgent.AnalyzeCode(name, code, context);
                     htmlBuilder.AddMarkdown(analysis);
                     _realTimeWindow.AppendLog(name, analysis);
 
-                    // Build Summary
+                    // 2. Build Summary for README
                     string snippet = string.Join("\n", code.Split('\n').Take(30));
                     summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
 
-                    // 3. Database Check (No Diagrams, just collecting text)
+                    // 3. Database Collection (Checks 'code' variable)
                     string lower = name.ToLower();
                     if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") ||
                         lower.Contains("dto") || code.Contains("CREATE TABLE") ||
@@ -136,10 +142,12 @@ namespace Documenter
                     }
                 }
 
-                // 4. Database Text Analysis (Replaces Diagram)
+                // --- POST-LOOP GENERATION ---
+
+                // Database Analysis (Text Table)
                 if (dbData.Length > 50)
                 {
-                    Log("🗄️ Analyzing Database Structure (Text Summary)...");
+                    Log("🗄️ Analyzing Database Structure...");
                     string dbAnalysis = await AiAgent.AnalyzeDatabaseLogic(dbData.ToString());
 
                     if (!string.IsNullOrWhiteSpace(dbAnalysis) && !dbAnalysis.Contains("N/A"))
@@ -149,12 +157,13 @@ namespace Documenter
                     }
                 }
 
-                // 5. Generate README
+                // README Generation (Uses 'repoUrl' which is defined at the top)
                 Log("📘 Generating README...");
                 string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl);
                 htmlBuilder.InjectReadme(readme);
                 _realTimeWindow.AppendLog("README", readme);
 
+                // PDF Generation (Uses 'pdfPath' which is defined at the top)
                 Log("📄 Rendering PDF...");
                 string html = htmlBuilder.GetHtml();
                 await File.WriteAllTextAsync(htmlPath, html);
@@ -164,6 +173,8 @@ namespace Documenter
                 if (lblStatus != null) lblStatus.Text = "Complete!";
 
                 _realTimeWindow.AppendLog("SYSTEM", "🎉 Generation Complete. Opening PDF...");
+
+                // Open PDF
                 Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
             }
             catch (Exception ex)

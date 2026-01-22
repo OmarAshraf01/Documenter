@@ -24,7 +24,6 @@ namespace Documenter
                 </div><div class='section-break'></div>";
         }
 
-        // --- NEW: Injects text-based DB analysis instead of diagrams ---
         public void InjectDatabaseAnalysis(string markdown)
         {
             if (string.IsNullOrWhiteSpace(markdown) || markdown.Contains("N/A")) return;
@@ -60,12 +59,17 @@ namespace Documenter
                 <html>
                 <head>
                     <style>
-                        body { font-family: 'Segoe UI', Helvetica, sans-serif; line-height: 1.6; color: #24292e; max-width: 950px; margin: 0 auto; padding: 40px; font-size: 14px; }
+                        /* CHANGED: Use Arial to prevent PDF font embedding errors */
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #24292e; max-width: 950px; margin: 0 auto; padding: 40px; font-size: 14px; }
+                        
                         h1 { border-bottom: 2px solid #eaecef; padding-bottom: 5px; font-size: 26px; margin-top: 30px; color: #0366d6; }
                         h2 { border-bottom: 1px solid #eaecef; padding-bottom: 5px; font-size: 20px; margin-top: 25px; }
+                        
                         .tree-box { background-color: #f1f8ff; border: 1px solid #c8e1ff; border-radius: 5px; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; white-space: pre; overflow-x: auto; display: block; }
+                        
                         .doc-section { margin-bottom: 30px; }
                         .section-break { page-break-after: always; display: block; height: 1px; margin: 20px 0; }
+                        
                         table { border-collapse: collapse; width: 100%; margin: 15px 0; font-size: 13px; }
                         th, td { border: 1px solid #dfe2e5; padding: 8px 12px; text-align: left; }
                         th { background-color: #f6f8fa; font-weight: 700; }
