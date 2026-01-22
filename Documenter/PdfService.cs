@@ -9,72 +9,62 @@ namespace Documenter
 {
     public class PdfService
     {
-        public static async Task ConvertHtmlToPdf(string htmlContent, string outputPath, Action<string> logger)
+        // Path logic shared between methods
+        private static string _browserFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".local-chromium");
+
+        // 1. This runs in the background while AI is working
+        public static async Task PrepareBrowserAsync(Action<string> logger)
         {
-            // 1. Setup paths
-            string exeFolder = AppDomain.CurrentDomain.BaseDirectory;
-            string browserFolder = Path.Combine(exeFolder, ".local-chromium");
+            var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions { Path = _browserFolder });
 
-            var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions
-            {
-                Path = browserFolder
-            });
-
-            // 2. Check if we need to download
+            // Check if already installed
             var installedBrowser = browserFetcher.GetInstalledBrowsers().FirstOrDefault();
+            if (installedBrowser != null) return; // Already ready, exit fast.
 
-            if (installedBrowser == null)
+            logger("⬇️ [Background] Starting Browser Download...");
+
+            // Heartbeat to show it's alive
+            var cts = new System.Threading.CancellationTokenSource();
+            var heartbeat = Task.Run(async () =>
             {
-                logger("⬇️ Browser not found. Starting download (approx 170MB)...");
-                logger("⏳ This happens only once. Please wait...");
-
-                // --- HEARTBEAT LOGIC START ---
-                // This will print a log every 5 seconds so you know it's not frozen
-                var cts = new System.Threading.CancellationTokenSource();
-                var heartbeat = Task.Run(async () =>
+                while (!cts.Token.IsCancellationRequested)
                 {
-                    while (!cts.Token.IsCancellationRequested)
-                    {
-                        await Task.Delay(5000);
-                        if (!cts.Token.IsCancellationRequested)
-                        {
-                            // Use Invoke pattern if needed, but logger usually handles string safely
-                            try { logger("... Still downloading (Do not close) ..."); } catch { }
-                        }
-                    }
-                }, cts.Token);
-                // --- HEARTBEAT LOGIC END ---
-
-                try
-                {
-                    await browserFetcher.DownloadAsync();
+                    await Task.Delay(8000); // Notify every 8 seconds
+                    if (!cts.Token.IsCancellationRequested) try { logger("... [Background] Still downloading Browser ..."); } catch { }
                 }
-                finally
-                {
-                    cts.Cancel(); // Stop the heartbeat messages
-                }
+            }, cts.Token);
 
-                logger("✅ Download Complete.");
-            }
-            else
+            try
             {
-                logger("✅ Browser already found. Skipping download.");
+                await browserFetcher.DownloadAsync();
+                logger("✅ [Background] Browser Download Complete.");
             }
+            catch (Exception ex)
+            {
+                logger($"❌ [Background] Download Failed: {ex.Message}");
+            }
+            finally
+            {
+                cts.Cancel();
+            }
+        }
 
-            // 3. Locate the executable
-            string? chromePath = Directory.GetFiles(browserFolder, "chrome.exe", SearchOption.AllDirectories).FirstOrDefault();
+        // 2. This runs at the very end
+        public static async Task ConvertHtmlToPdf(string htmlContent, string outputPath)
+        {
+            // Find the executable (It should be there now!)
+            string? chromePath = Directory.GetFiles(_browserFolder, "chrome.exe", SearchOption.AllDirectories).FirstOrDefault();
 
             if (string.IsNullOrEmpty(chromePath))
             {
                 // Fallback search
-                chromePath = Directory.GetFiles(browserFolder, "*.exe", SearchOption.AllDirectories)
+                chromePath = Directory.GetFiles(_browserFolder, "*.exe", SearchOption.AllDirectories)
                                       .FirstOrDefault(f => f.Contains("chrome") || f.Contains("chromium"));
 
                 if (string.IsNullOrEmpty(chromePath))
-                    throw new FileNotFoundException($"Chrome executable not found in {browserFolder}.");
+                    throw new FileNotFoundException("Chrome executable not found. The background download might have failed.");
             }
 
-            // 4. Launch
             var options = new LaunchOptions
             {
                 Headless = true,
@@ -88,13 +78,14 @@ namespace Documenter
             await page.SetContentAsync(htmlContent, new NavigationOptions
             {
                 WaitUntil = new[] { WaitUntilNavigation.Networkidle0 },
-                Timeout = 0 // Disable timeout
+                Timeout = 0
             });
 
-            // Small delay for layout
+            // Wait for Mermaid
+            try { await page.WaitForSelectorAsync(".mermaid svg", new WaitForSelectorOptions { Timeout = 3000 }); } catch { }
+
             await Task.Delay(1000);
 
-            // 5. Save PDF
             await page.PdfAsync(outputPath, new PdfOptions
             {
                 Format = PaperFormat.A4,

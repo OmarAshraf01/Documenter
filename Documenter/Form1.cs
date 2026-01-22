@@ -66,7 +66,6 @@ namespace Documenter
 
         private async void BtnStart_Click(object? sender, EventArgs e)
         {
-            // --- FIX CS0103: Define variables at the TOP level ---
             string repoUrl = txtUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(repoUrl)) { MessageBox.Show("Enter URL"); return; }
 
@@ -85,6 +84,10 @@ namespace Documenter
 
             try
             {
+                // --- NEW: Start Download Task IMMEDIATELY (Fire and Forget) ---
+                Log("🚀 Initializing Background Tasks...");
+                Task browserDownloadTask = PdfService.PrepareBrowserAsync(Log);
+
                 if (Directory.Exists(codeFolder)) GitService.DeleteDirectory(codeFolder);
                 Directory.CreateDirectory(codeFolder);
                 Directory.CreateDirectory(docsFolder);
@@ -105,20 +108,18 @@ namespace Documenter
                                         .OrderBy(f => f)
                                         .ToList();
 
-                // --- FIX CS0103: 'total' defined here ---
                 int total = files.Count;
-
                 Log("🌳 Generating Folder Structure...");
                 htmlBuilder.InjectProjectStructure(GenerateTreeRecursively(codeFolder, ""));
 
                 if (progressBar1 != null) { progressBar1.Maximum = total; progressBar1.Value = 0; }
 
+                // --- AI ANALYSIS LOOP ---
                 for (int i = 0; i < total; i++)
                 {
                     string file = files[i];
                     string name = Path.GetFileName(file);
 
-                    // --- FIX CS0103: 'code' defined inside loop ---
                     string code = await File.ReadAllTextAsync(file);
                     if (string.IsNullOrWhiteSpace(code)) continue;
 
@@ -164,8 +165,16 @@ namespace Documenter
                 string html = htmlBuilder.GetHtml();
                 await File.WriteAllTextAsync(htmlPath, html);
 
-                // Call PDF service
-                await PdfService.ConvertHtmlToPdf(html, pdfPath, Log);
+                // --- NEW: Check if browser is ready ---
+                if (!browserDownloadTask.IsCompleted)
+                {
+                    Log("⏳ Waiting for browser download to finish...");
+                }
+                // Wait for the background task to ensure Chrome is there
+                await browserDownloadTask;
+
+                // Now convert (It will be instant)
+                await PdfService.ConvertHtmlToPdf(html, pdfPath);
 
                 Log("🚀 Done!");
                 if (lblStatus != null) lblStatus.Text = "Complete!";
