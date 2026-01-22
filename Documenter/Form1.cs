@@ -36,9 +36,24 @@ namespace Documenter
             if (lblSelectedPath != null) lblSelectedPath.Text = _selectedBasePath;
         }
 
-        private void Form1_Load(object? sender, EventArgs e)
+        private async void Form1_Load(object? sender, EventArgs e)
         {
-            if (lblStatus != null) lblStatus.Text = "Ready.";
+            if (lblStatus != null) lblStatus.Text = "Initializing...";
+
+            // Disable start button while loading Docker
+            btnStart.Enabled = false;
+
+            // Call the Docker Service and pass the Log function so users see progress
+            string result = await Task.Run(() => DockerService.InitializeAsync(Log));
+
+            Log(result);
+            if (lblStatus != null) lblStatus.Text = result.Contains("❌") ? "Error" : "Ready";
+
+            // Re-enable button only if Docker started successfully
+            if (!result.Contains("❌"))
+            {
+                btnStart.Enabled = true;
+            }
         }
 
         private void BtnBrowse_Click(object? sender, EventArgs e)
