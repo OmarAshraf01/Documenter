@@ -17,7 +17,6 @@ namespace Documenter
         {
             if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
 
-            // Note: Doubled braces {{ }} escape them so they appear as text in the string
             var prompt = $@"
                 [ROLE: Senior Technical Writer]
                 Analyze this source file: '{fileName}'.
@@ -51,20 +50,22 @@ namespace Documenter
 
                 ### RULES
                 - Use 'graph TD'.
-                - Group nodes using 'subgraph UI', 'subgraph BLL', 'subgraph DAL'.
-                - Connect the layers: UI --> BLL --> DAL.
+                - Group nodes using 'subgraph UI', 'subgraph BLL', 'subgraph DAL', 'subgraph Core' (infer appropriate layers).
+                - Connect the layers logically (e.g., UI --> BLL --> DAL).
                 - Return ONLY valid Mermaid code.
                 - NO markdown fences (```).
+                - IF NO CLEAR ARCHITECTURE: Just map the main file dependencies.
             ";
             return await CallOllama(prompt);
         }
 
         public static async Task<string> GenerateDatabaseSchema(string dalCode)
         {
-            // FIX: Curly braces are doubled {{ }} to prevent compiler errors
             var prompt = $@"
                 [ROLE: Database Architect]
-                Infer the Database Schema (ERD) from this code.
+                Analyze the code below. If it contains SQL tables, Entity Framework Models, or DTOs, generate a Mermaid ER Diagram.
+                
+                **CRITICAL RULE:** IF NO DATABASE DEFINITIONS ARE FOUND, RETURN THE STRING 'N/A' ONLY. Do not invent a schema.
 
                 ### CODE SNIPPETS
                 {dalCode}
@@ -72,8 +73,7 @@ namespace Documenter
                 ### RULES
                 - Start with 'erDiagram'.
                 - Use STRICT format: 'EntityName {{ type name }}'. 
-                - **CRITICAL: NO SPACES in Entity names** (Use 'User_Table', NOT 'User Table').
-                - Infer relationships if possible (e.g., User ||--o{{ Order).
+                - **NO SPACES in Entity names** (Use 'User_Table', NOT 'User Table').
                 - Return ONLY valid Mermaid code.
                 - NO markdown fences.
             ";
@@ -84,26 +84,43 @@ namespace Documenter
         {
             var prompt = $@"
                 [ROLE: Senior Developer Advocate]
-                Write a 'Zero to Hero' README.md for a complete beginner.
+                Write a professional, comprehensive README.md.
 
                 ### REPO URL
                 {repoUrl}
-                ### FILES
+                ### CODE SUMMARY
                 {projectSummary}
 
-                ### SECTIONS
+                ### OUTPUT FORMAT
                 # [Project Name]
-                ## 📖 Overview
-                ## ✨ Features
-                ## 🏗️ Architecture
+
+                ![Platform](https://img.shields.io/badge/Platform-Windows%7CLinux-blue)
+                ![Language](https://img.shields.io/badge/Language-Inferred-purple)
+
+                ## 📖 Description
+                [Write a compelling, professional 2-paragraph description of what the project does, inferred from the code.]
+
+                ## ✨ Key Features
+                [Bullet points of specific features found in the code, e.g., 'User Authentication', 'PDF Generation'.]
+
                 ## 🛠️ Tech Stack
-                
-                ## 🚀 Zero to Hero: How to Run (Step-by-Step)
-                *Write this section for a total beginner.*
-                1. **Prerequisites**: What to install (VS, SQL Server, .NET SDK).
-                2. **Cloning**: `git clone {repoUrl}`
-                3. **Database Setup**: How to create the DB and update connection strings.
-                4. **Running**: How to build and start the app.
+                [List languages and frameworks used.]
+
+                ## ⚙️ Prerequisites
+                [List software needed to run this, e.g., Visual Studio, SQL Server, Node.js]
+
+                ## 🚀 Installation & Setup Guide
+                1. Clone the repository: `git clone {repoUrl}`
+                2. [Step inferred from code, e.g., 'Open Solution in VS', 'Run npm install']
+                3. [Step inferred, e.g., 'Update connection string in App.config']
+
+                ## 🎮 How to Use
+                [Explain how to run the application.]
+
+                ## 🐛 Troubleshooting
+                | Issue | Solution |
+                |---|---|
+                | [Common issue 1 inferred] | [Solution] |
             ";
             return await CallOllama(prompt);
         }

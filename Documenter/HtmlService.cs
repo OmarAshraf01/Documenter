@@ -27,7 +27,9 @@ namespace Documenter
 
         public void InjectDatabaseSchema(string rawAiOutput)
         {
-            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10) return;
+            // Strict check: If empty, short, or explicitly "N/A", do nothing.
+            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10 || rawAiOutput.Contains("N/A")) return;
+
             _schemaSection = $@"
                 <div class='doc-section'>
                     <div class='diagram-box'>
@@ -39,6 +41,8 @@ namespace Documenter
 
         public void InjectDiagram(string rawAiOutput)
         {
+            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10) return;
+
             _diagramSection = $@"
                 <div class='doc-section'>
                     <div class='diagram-box'>
@@ -47,7 +51,6 @@ namespace Documenter
                     </div>
                 </div><div class='section-break'></div>";
         }
-
         public void InjectReadme(string markdown)
         {
             var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().UseGridTables().Build();

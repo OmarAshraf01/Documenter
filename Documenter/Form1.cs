@@ -11,7 +11,7 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".sql", ".xml", ".config" };
+        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".sql", ".xml", ".config", ".html", ".css" };
         private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", "debug", "lib", "packages" };
 
         private string _selectedBasePath = string.Empty;
@@ -22,12 +22,10 @@ namespace Documenter
             InitializeComponent();
 
             // --- BULLETPROOF FIX FOR DOUBLE CLICKS ---
-            // 1. Unsubscribe first (removes any existing connection from Designer)
             btnBrowse.Click -= BtnBrowse_Click;
             btnStart.Click -= BtnStart_Click;
             this.Load -= Form1_Load;
 
-            // 2. Subscribe exactly once
             btnBrowse.Click += BtnBrowse_Click;
             btnStart.Click += BtnStart_Click;
             this.Load += Form1_Load;
@@ -85,9 +83,9 @@ namespace Documenter
                 var erData = new StringBuilder();
 
                 var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories)
-                                         .Where(IsCodeFile)
-                                         .OrderBy(f => f)
-                                         .ToList();
+                                        .Where(IsCodeFile)
+                                        .OrderBy(f => f)
+                                        .ToList();
 
                 Log("🌳 Generating Folder Structure...");
                 htmlBuilder.InjectProjectStructure(GenerateTreeRecursively(codeFolder, ""));
@@ -100,44 +98,70 @@ namespace Documenter
                     string file = files[i];
                     string name = Path.GetFileName(file);
 
+                    // --- 1. FIXED: Read file content so variable 'code' exists ---
+                    string code = await File.ReadAllTextAsync(file);
+
+                    if (string.IsNullOrWhiteSpace(code)) continue;
+
                     string msg = $"Analyzing ({i + 1}/{total}): {name}";
                     Log(msg);
                     if (lblStatus != null) lblStatus.Text = msg;
                     if (progressBar1 != null) progressBar1.Value = i + 1;
 
-                    string code = await File.ReadAllTextAsync(file);
-                    if (code.Length > 10)
+                    // Analysis Logic
+                    string context = RagService.GetContext(code);
+                    string analysis = await AiAgent.AnalyzeCode(name, code, context);
+                    htmlBuilder.AddMarkdown(analysis);
+
+                    // Add to summary for Readme/Architecture
+                    // We truncate to keep the prompt size manageable
+                    string snippet = string.Join("\n", code.Split('\n').Take(30));
+                    summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
+
+                    // --- 2. LOGIC: Collection for Database Schema ---
+                    string lower = name.ToLower();
+                    // We only collect code if it looks like a database file
+                    if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") || lower.Contains("dto") || code.Contains("CREATE TABLE") || code.Contains("DbContext") || code.Contains("DbSet"))
                     {
-                        string context = RagService.GetContext(code);
-                        string analysis = await AiAgent.AnalyzeCode(name, code, context);
-                        htmlBuilder.AddMarkdown(analysis);
-
-                        string snippet = string.Join("\n", code.Split('\n').Take(20));
-                        summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
-
-                        // We still collect this simply to pass context, but we won't obsess over the schema diagram
-                        string lower = name.ToLower();
-                        if (lower.Contains("dal") || lower.Contains("model") || code.Contains("CREATE TABLE"))
-                        {
-                            erData.AppendLine($"--- {name} ---\n{code}\n");
-                        }
+                        erData.AppendLine($"--- {name} ---\n{code}\n");
                     }
                 }
 
-                // If you want to skip Diagrams/Schema, we just comment these out or leave them.
-                // I will leave them enabled but wrapped safely so they don't break the app.
+                // --- 3. ARCHITECTURE DIAGRAM (Strict Check) ---
                 Log("📊 Generating Architecture...");
                 string arch = await AiAgent.GenerateDiagram(summaryForAi.ToString());
-                htmlBuilder.InjectDiagram(arch);
 
-                if (erData.Length > 50)
+                // Only inject if it looks like valid Mermaid
+                if (!string.IsNullOrWhiteSpace(arch) && (arch.Contains("graph") || arch.Contains("subgraph")))
                 {
-                    Log("🗄️ Generating Schema...");
-                    string erd = await AiAgent.GenerateDatabaseSchema(erData.ToString());
-                    htmlBuilder.InjectDatabaseSchema(erd);
+                    htmlBuilder.InjectDiagram(arch);
+                }
+                else
+                {
+                    Log("⚠️ Skipping Architecture (No valid structure generated).");
                 }
 
-                Log("📘 Generating README...");
+                // --- 4. DATABASE SCHEMA (Conditional Check) ---
+                // Only attempt if we actually found database-like code
+                if (erData.Length > 50)
+                {
+                    Log("🗄️ Checking for Database Schema...");
+                    string erd = await AiAgent.GenerateDatabaseSchema(erData.ToString());
+
+                    // CHECK: Did the AI find a schema, or did it return N/A?
+                    if (!string.IsNullOrWhiteSpace(erd) && !erd.Contains("N/A") && erd.Contains("erDiagram"))
+                    {
+                        Log("✅ Schema found! Drawing diagram...");
+                        htmlBuilder.InjectDatabaseSchema(erd);
+                    }
+                    else
+                    {
+                        Log("🚫 No database schema detected. Skipping.");
+                    }
+                }
+
+                // --- 5. PROFESSIONAL README ---
+                Log("📘 Generating Professional README...");
                 string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl);
                 htmlBuilder.InjectReadme(readme);
 
