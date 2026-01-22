@@ -3,54 +3,68 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Documenter
 {
     public static class RagService
     {
-        // Stores all project code in memory (Key = FileName, Value = Code)
+        // Stores all project code: Key = ClassName/FileName, Value = Code Content
         private static Dictionary<string, string> KnowledgeBase = new Dictionary<string, string>();
 
-        // Call this ONCE after cloning to "read" the whole project
+        // 1. Valid extensions to index
+        private static readonly HashSet<string> ValidExtensions = new()
+        { ".cs", ".java", ".py", ".cpp", ".js", ".ts", ".sql", ".xml", ".json" };
+
         public static void IndexProject(string folderPath)
         {
             KnowledgeBase.Clear();
             var files = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories)
-                .Where(f => f.EndsWith(".cs") || f.EndsWith(".java") || f.EndsWith(".py") || f.EndsWith(".cpp"));
+                .Where(f => ValidExtensions.Contains(Path.GetExtension(f).ToLower()));
 
             foreach (var file in files)
             {
-                string name = Path.GetFileNameWithoutExtension(file);
-                // Store unique files only
-                if (!KnowledgeBase.ContainsKey(name))
+                // We use the file name (without extension) as the 'Key' (e.g., "UserBLL")
+                string key = Path.GetFileNameWithoutExtension(file);
+
+                // Avoid duplicates
+                if (!KnowledgeBase.ContainsKey(key))
                 {
-                    KnowledgeBase[name] = File.ReadAllText(file);
+                    KnowledgeBase[key] = File.ReadAllText(file);
                 }
             }
         }
 
-        // Finds code related to the current file being analyzed
         public static string GetContext(string currentCode)
         {
             StringBuilder context = new StringBuilder();
             int matches = 0;
 
+            // Iterate through every file in our knowledge base
             foreach (var kvp in KnowledgeBase)
             {
-                string className = kvp.Key;
+                string otherFileName = kvp.Key;
+                string otherFileContent = kvp.Value;
 
-                // RAG LOGIC: If the current file mentions another class (e.g., "new UserBLL()"), 
-                // but isn't defining it, grab that class's code.
-                if (currentCode.Contains(className) && !currentCode.Contains($"class {className}"))
+                // RULE 1: Don't include the file itself as context
+                // (Simple check: if the content is identical, skip it)
+                if (currentCode.Equals(otherFileContent)) continue;
+
+                // RULE 2: Use Regex for "Whole Word" matching.
+                // This prevents "User" matching inside "UserList" or "SuperUser".
+                // We look for the other file's name inside the current code.
+                if (Regex.IsMatch(currentCode, $@"\b{Regex.Escape(otherFileName)}\b"))
                 {
-                    // Truncate to 1500 chars to avoid crashing the AI with too much text
-                    string snippet = kvp.Value.Length > 1500 ? kvp.Value.Substring(0, 1500) + "...(truncated)" : kvp.Value;
+                    // Truncate to save token space (1500 chars is usually enough for context)
+                    string snippet = otherFileContent.Length > 1500
+                        ? otherFileContent.Substring(0, 1500) + "...(truncated)"
+                        : otherFileContent;
 
-                    context.AppendLine($"--- REFERENCE: {className}.cs ---\n{snippet}\n");
+                    context.AppendLine($"--- REFERENCE: {otherFileName} ---\n{snippet}\n");
                     matches++;
                 }
 
-                // Limit to 3 related files to keep it fast
+                // RULE 3: Stop after 3 relevant files to keep the prompt fast
                 if (matches >= 3) break;
             }
 

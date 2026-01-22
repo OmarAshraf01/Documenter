@@ -6,8 +6,7 @@ namespace Documenter
     public class HtmlService
     {
         private string _treeSection = "";
-        private string _diagramSection = "";
-        private string _schemaSection = "";
+        private string _dbSection = "";
         private string _readmeSection = "";
         private StringBuilder _codeAnalysisSection = new StringBuilder();
 
@@ -25,32 +24,20 @@ namespace Documenter
                 </div><div class='section-break'></div>";
         }
 
-        public void InjectDatabaseSchema(string rawAiOutput)
+        // --- NEW: Injects text-based DB analysis instead of diagrams ---
+        public void InjectDatabaseAnalysis(string markdown)
         {
-            // Strict check: If empty, short, or explicitly "N/A", do nothing.
-            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10 || rawAiOutput.Contains("N/A")) return;
+            if (string.IsNullOrWhiteSpace(markdown) || markdown.Contains("N/A")) return;
 
-            _schemaSection = $@"
+            var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().UseGridTables().Build();
+            string html = Markdown.ToHtml(markdown, pipeline);
+
+            _dbSection = $@"
                 <div class='doc-section'>
-                    <div class='diagram-box'>
-                        <h2>🗄️ Database Schema (ERD)</h2>
-                        <div class='mermaid'>{rawAiOutput}</div>
-                    </div>
+                    {html}
                 </div><div class='section-break'></div>";
         }
 
-        public void InjectDiagram(string rawAiOutput)
-        {
-            if (string.IsNullOrWhiteSpace(rawAiOutput) || rawAiOutput.Length < 10) return;
-
-            _diagramSection = $@"
-                <div class='doc-section'>
-                    <div class='diagram-box'>
-                        <h2>🏗️ Architecture Diagram</h2>
-                        <div class='mermaid'>{rawAiOutput}</div>
-                    </div>
-                </div><div class='section-break'></div>";
-        }
         public void InjectReadme(string markdown)
         {
             var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().UseGridTables().Build();
@@ -72,23 +59,11 @@ namespace Documenter
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <script src='[https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js](https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js)'></script>
-                    <script>
-                        mermaid.initialize({
-                            startOnLoad: true,
-                            theme: 'neutral',
-                            securityLevel: 'loose',
-                            maxEdges: 500,  // Allow more connections
-                            flowchart: { useMaxWidth: false, htmlLabels: true }
-                        });
-                    </script>
                     <style>
                         body { font-family: 'Segoe UI', Helvetica, sans-serif; line-height: 1.6; color: #24292e; max-width: 950px; margin: 0 auto; padding: 40px; font-size: 14px; }
                         h1 { border-bottom: 2px solid #eaecef; padding-bottom: 5px; font-size: 26px; margin-top: 30px; color: #0366d6; }
                         h2 { border-bottom: 1px solid #eaecef; padding-bottom: 5px; font-size: 20px; margin-top: 25px; }
                         .tree-box { background-color: #f1f8ff; border: 1px solid #c8e1ff; border-radius: 5px; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; white-space: pre; overflow-x: auto; display: block; }
-                        .diagram-box { text-align: center; margin: 20px 0; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; page-break-inside: avoid; }
-                        .mermaid { display: flex; justify-content: center; }
                         .doc-section { margin-bottom: 30px; }
                         .section-break { page-break-after: always; display: block; height: 1px; margin: 20px 0; }
                         table { border-collapse: collapse; width: 100%; margin: 15px 0; font-size: 13px; }
@@ -100,9 +75,8 @@ namespace Documenter
                 <body>");
 
             sb.Append(_treeSection);
-            sb.Append(_diagramSection);
-            sb.Append(_schemaSection);
             sb.Append(_readmeSection);
+            sb.Append(_dbSection);
             sb.Append(_codeAnalysisSection);
 
             sb.Append("</body></html>");

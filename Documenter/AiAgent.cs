@@ -18,19 +18,24 @@ namespace Documenter
             if (code.Length > 8000) code = code.Substring(0, 8000) + "...[truncated]";
 
             var prompt = $@"
-                [ROLE: Senior Technical Writer]
-                Analyze this source file: '{fileName}'.
+                [ROLE: Technical Writer]
+                Analyze this file: '{fileName}'.
                 
                 ### CODE
                 {code}
                 ### CONTEXT
                 {context}
                 
-                ### OUTPUT FORMAT (Markdown)
+                ### STRICT OUTPUT RULES
+                1. Markdown only.
+                2. NO conversational text ('Here is the analysis').
+                3. NO closing remarks.
+
+                ### FORMAT
                 ## 📄 {fileName}
-                **Type:** [Class/Interface/Form]
+                **Type:** [Class/Interface]
                 ### 📘 Summary
-                [Concise summary of responsibility]
+                [One sentence summary]
                 ### 🛠️ Key Components
                 | Name | Type | Description |
                 |---|---|---|
@@ -39,43 +44,31 @@ namespace Documenter
             return await CallOllama(prompt);
         }
 
-        public static async Task<string> GenerateDiagram(string projectSummary)
+        // --- NEW: Text-Based Database Analysis (No Diagrams) ---
+        public static async Task<string> AnalyzeDatabaseLogic(string dalCode)
         {
             var prompt = $@"
-                [ROLE: System Architect]
-                Create a High-Level Layered Architecture Diagram using Mermaid.js.
+                [ROLE: Senior Backend Developer]
+                Analyze the provided code snippets (DAL/SQL).
                 
-                ### FILES
-                {projectSummary}
-
-                ### RULES
-                - Use 'graph TD'.
-                - Group nodes using 'subgraph UI', 'subgraph BLL', 'subgraph DAL', 'subgraph Core' (infer appropriate layers).
-                - Connect the layers logically (e.g., UI --> BLL --> DAL).
-                - Return ONLY valid Mermaid code.
-                - NO markdown fences (```).
-                - IF NO CLEAR ARCHITECTURE: Just map the main file dependencies.
-            ";
-            return await CallOllama(prompt);
-        }
-
-        public static async Task<string> GenerateDatabaseSchema(string dalCode)
-        {
-            var prompt = $@"
-                [ROLE: Database Architect]
-                Analyze the code below. If it contains SQL tables, Entity Framework Models, or DTOs, generate a Mermaid ER Diagram.
+                Create a **Markdown Table** summarizing the database entities.
                 
-                **CRITICAL RULE:** IF NO DATABASE DEFINITIONS ARE FOUND, RETURN THE STRING 'N/A' ONLY. Do not invent a schema.
-
                 ### CODE SNIPPETS
                 {dalCode}
 
-                ### RULES
-                - Start with 'erDiagram'.
-                - Use STRICT format: 'EntityName {{ type name }}'. 
-                - **NO SPACES in Entity names** (Use 'User_Table', NOT 'User Table').
-                - Return ONLY valid Mermaid code.
-                - NO markdown fences.
+                ### INSTRUCTIONS
+                1. Identify Table Names/Entities.
+                2. Describe what they store.
+                3. **Do NOT draw diagrams.** Output text/table only.
+                4. If no database logic is found, return 'N/A'.
+
+                ### OUTPUT FORMAT
+                ## 🗄️ Database Structure
+                The system appears to use the following data structure:
+
+                | Entity / Table | Inferred Fields | Purpose |
+                |---|---|---|
+                | [Name] | [Fields] | [Description] |
             ";
             return await CallOllama(prompt);
         }
@@ -83,44 +76,35 @@ namespace Documenter
         public static async Task<string> GenerateReadme(string projectSummary, string repoUrl)
         {
             var prompt = $@"
-                [ROLE: Senior Developer Advocate]
-                Write a professional, comprehensive README.md.
+                [ROLE: Senior Developer]
+                Write a professional README.md.
 
                 ### REPO URL
                 {repoUrl}
                 ### CODE SUMMARY
                 {projectSummary}
 
-                ### OUTPUT FORMAT
+                ### STRICT OUTPUT RULES
+                1. Markdown only.
+                2. NO conversational text ('Here is the readme').
+                3. NO 'Feel free to ask questions'.
+
+                ### FORMAT
                 # [Project Name]
 
-                ![Platform](https://img.shields.io/badge/Platform-Windows%7CLinux-blue)
-                ![Language](https://img.shields.io/badge/Language-Inferred-purple)
-
                 ## 📖 Description
-                [Write a compelling, professional 2-paragraph description of what the project does, inferred from the code.]
+                [Professional description]
 
                 ## ✨ Key Features
-                [Bullet points of specific features found in the code, e.g., 'User Authentication', 'PDF Generation'.]
+                [Bullet points]
 
                 ## 🛠️ Tech Stack
-                [List languages and frameworks used.]
+                [List]
 
-                ## ⚙️ Prerequisites
-                [List software needed to run this, e.g., Visual Studio, SQL Server, Node.js]
-
-                ## 🚀 Installation & Setup Guide
-                1. Clone the repository: `git clone {repoUrl}`
-                2. [Step inferred from code, e.g., 'Open Solution in VS', 'Run npm install']
-                3. [Step inferred, e.g., 'Update connection string in App.config']
-
-                ## 🎮 How to Use
-                [Explain how to run the application.]
-
-                ## 🐛 Troubleshooting
-                | Issue | Solution |
-                |---|---|
-                | [Common issue 1 inferred] | [Solution] |
+                ## 🚀 Setup
+                1. Clone: `git clone {repoUrl}`
+                2. [Step 2]
+                3. [Step 3]
             ";
             return await CallOllama(prompt);
         }
@@ -135,18 +119,21 @@ namespace Documenter
                 var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
                 var response = await client.PostAsync(OllamaUrl, content);
 
-                if (!response.IsSuccessStatusCode) return "AI Error: " + response.ReasonPhrase;
+                if (!response.IsSuccessStatusCode) return "AI Error";
 
                 var contentString = await response.Content.ReadAsStringAsync();
                 JObject? json = JsonConvert.DeserializeObject<JObject>(contentString);
-                if (json == null) return "AI Error: Empty AI response.";
+                if (json == null) return "";
 
                 JToken? responseToken = json["response"];
-                if (responseToken == null) return "AI Error: Missing response field.";
+                if (responseToken == null) return "";
 
                 string result = responseToken.ToString();
 
-                // CLEANUP: Remove markdown fences
+                // Cleanup conversational filler
+                result = Regex.Replace(result, @"^Here is.*?:", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                result = Regex.Replace(result, @"Note:.*", "", RegexOptions.IgnoreCase);
+
                 return Regex.Replace(result, @"^```[a-z]*\s*|\s*```$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
             }
             catch { return "Error: AI Connection Failed."; }

@@ -16,12 +16,13 @@ namespace Documenter
 
         private string _selectedBasePath = string.Empty;
         private string _currentLogFile = string.Empty;
+        private RealTimeView _realTimeWindow;
 
         public Form1()
         {
             InitializeComponent();
 
-            // --- BULLETPROOF FIX FOR DOUBLE CLICKS ---
+            // Fix double subscriptions
             btnBrowse.Click -= BtnBrowse_Click;
             btnStart.Click -= BtnStart_Click;
             this.Load -= Form1_Load;
@@ -53,11 +54,15 @@ namespace Documenter
 
         private async void BtnStart_Click(object? sender, EventArgs e)
         {
+            // 1. Define these variables at the very top so they are visible everywhere
             string repoUrl = txtUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(repoUrl)) { MessageBox.Show("Enter URL"); return; }
 
             btnStart.Enabled = false;
             btnBrowse.Enabled = false;
+
+            _realTimeWindow = new RealTimeView();
+            _realTimeWindow.Show();
 
             string projectName = GetProjectNameFromUrl(repoUrl);
             string projectRoot = Path.Combine(_selectedBasePath, projectName);
@@ -73,24 +78,27 @@ namespace Documenter
                 Directory.CreateDirectory(docsFolder);
                 _currentLogFile = Path.Combine(docsFolder, "log.txt");
 
-                Log("⬇️ Cloning...");
+                Log("⬇️ Cloning repository...");
                 await Task.Run(() => GitService.CloneRepository(repoUrl, codeFolder));
-                Log("🧠 Indexing...");
+
+                Log("🧠 Indexing knowledge base...");
                 RagService.IndexProject(codeFolder);
 
                 var htmlBuilder = new HtmlService();
                 var summaryForAi = new StringBuilder();
-                var erData = new StringBuilder();
+                var dbData = new StringBuilder();
 
                 var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories)
                                         .Where(IsCodeFile)
                                         .OrderBy(f => f)
                                         .ToList();
 
+                // Define 'total' here
+                int total = files.Count;
+
                 Log("🌳 Generating Folder Structure...");
                 htmlBuilder.InjectProjectStructure(GenerateTreeRecursively(codeFolder, ""));
 
-                int total = files.Count;
                 if (progressBar1 != null) { progressBar1.Maximum = total; progressBar1.Value = 0; }
 
                 for (int i = 0; i < total; i++)
@@ -98,7 +106,7 @@ namespace Documenter
                     string file = files[i];
                     string name = Path.GetFileName(file);
 
-                    // --- 1. FIXED: Read file content so variable 'code' exists ---
+                    // 2. Define 'code' INSIDE the loop, but before checking it
                     string code = await File.ReadAllTextAsync(file);
 
                     if (string.IsNullOrWhiteSpace(code)) continue;
@@ -108,62 +116,44 @@ namespace Documenter
                     if (lblStatus != null) lblStatus.Text = msg;
                     if (progressBar1 != null) progressBar1.Value = i + 1;
 
-                    // Analysis Logic
+                    // Analysis
                     string context = RagService.GetContext(code);
                     string analysis = await AiAgent.AnalyzeCode(name, code, context);
                     htmlBuilder.AddMarkdown(analysis);
+                    _realTimeWindow.AppendLog(name, analysis);
 
-                    // Add to summary for Readme/Architecture
-                    // We truncate to keep the prompt size manageable
+                    // Build Summary
                     string snippet = string.Join("\n", code.Split('\n').Take(30));
                     summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
 
-                    // --- 2. LOGIC: Collection for Database Schema ---
+                    // 3. Database Check (No Diagrams, just collecting text)
                     string lower = name.ToLower();
-                    // We only collect code if it looks like a database file
-                    if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") || lower.Contains("dto") || code.Contains("CREATE TABLE") || code.Contains("DbContext") || code.Contains("DbSet"))
+                    if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") ||
+                        lower.Contains("dto") || code.Contains("CREATE TABLE") ||
+                        code.Contains("DbContext") || code.Contains("DbSet") || code.Contains("INSERT INTO"))
                     {
-                        erData.AppendLine($"--- {name} ---\n{code}\n");
+                        dbData.AppendLine($"--- {name} ---\n{code}\n");
                     }
                 }
 
-                // --- 3. ARCHITECTURE DIAGRAM (Strict Check) ---
-                Log("📊 Generating Architecture...");
-                string arch = await AiAgent.GenerateDiagram(summaryForAi.ToString());
-
-                // Only inject if it looks like valid Mermaid
-                if (!string.IsNullOrWhiteSpace(arch) && (arch.Contains("graph") || arch.Contains("subgraph")))
+                // 4. Database Text Analysis (Replaces Diagram)
+                if (dbData.Length > 50)
                 {
-                    htmlBuilder.InjectDiagram(arch);
-                }
-                else
-                {
-                    Log("⚠️ Skipping Architecture (No valid structure generated).");
-                }
+                    Log("🗄️ Analyzing Database Structure (Text Summary)...");
+                    string dbAnalysis = await AiAgent.AnalyzeDatabaseLogic(dbData.ToString());
 
-                // --- 4. DATABASE SCHEMA (Conditional Check) ---
-                // Only attempt if we actually found database-like code
-                if (erData.Length > 50)
-                {
-                    Log("🗄️ Checking for Database Schema...");
-                    string erd = await AiAgent.GenerateDatabaseSchema(erData.ToString());
-
-                    // CHECK: Did the AI find a schema, or did it return N/A?
-                    if (!string.IsNullOrWhiteSpace(erd) && !erd.Contains("N/A") && erd.Contains("erDiagram"))
+                    if (!string.IsNullOrWhiteSpace(dbAnalysis) && !dbAnalysis.Contains("N/A"))
                     {
-                        Log("✅ Schema found! Drawing diagram...");
-                        htmlBuilder.InjectDatabaseSchema(erd);
-                    }
-                    else
-                    {
-                        Log("🚫 No database schema detected. Skipping.");
+                        htmlBuilder.InjectDatabaseAnalysis(dbAnalysis);
+                        _realTimeWindow.AppendLog("DATABASE ANALYSIS", dbAnalysis);
                     }
                 }
 
-                // --- 5. PROFESSIONAL README ---
-                Log("📘 Generating Professional README...");
+                // 5. Generate README
+                Log("📘 Generating README...");
                 string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), repoUrl);
                 htmlBuilder.InjectReadme(readme);
+                _realTimeWindow.AppendLog("README", readme);
 
                 Log("📄 Rendering PDF...");
                 string html = htmlBuilder.GetHtml();
@@ -172,6 +162,8 @@ namespace Documenter
 
                 Log("🚀 Done!");
                 if (lblStatus != null) lblStatus.Text = "Complete!";
+
+                _realTimeWindow.AppendLog("SYSTEM", "🎉 Generation Complete. Opening PDF...");
                 Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
             }
             catch (Exception ex)
@@ -224,7 +216,7 @@ namespace Documenter
             if (lstLog.InvokeRequired) lstLog.Invoke(new Action<string>(Log), msg);
             else
             {
-                lstLog.Items.Add($"{DateTime.Now.ToShortTimeString()}: {msg}");
+                lstLog.Items.Add($"{DateTime.Now:HH:mm:ss}: {msg}");
                 lstLog.TopIndex = lstLog.Items.Count - 1;
                 try { if (!string.IsNullOrEmpty(_currentLogFile)) File.AppendAllText(_currentLogFile, msg + "\n"); } catch { }
             }
