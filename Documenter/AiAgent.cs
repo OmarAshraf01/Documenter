@@ -10,7 +10,8 @@ namespace Documenter
 {
     public class AiAgent
     {
-        private const string OllamaUrl = "http://localhost:11434/api/generate";
+        // CHANGED: Port is now 11435
+        private const string OllamaUrl = "http://localhost:11435/api/generate";
         private const string ModelName = "qwen2.5-coder:1.5b";
 
         public static async Task<string> AnalyzeCode(string fileName, string code, string context)
@@ -28,7 +29,7 @@ namespace Documenter
                 
                 ### STRICT OUTPUT RULES
                 1. Markdown only.
-                2. NO conversational text ('Here is the analysis').
+                2. NO conversational text.
                 3. NO closing remarks.
 
                 ### FORMAT
@@ -55,11 +56,9 @@ namespace Documenter
                 ### INSTRUCTIONS
                 1. Identify Table Names/Entities.
                 2. Describe what they store.
-                3. Do NOT draw diagrams. Output text/table only.
-                4. If no database logic is found, return 'N/A'.
+                3. If no database logic is found, return 'N/A'.
                 ### OUTPUT FORMAT
                 ## 🗄️ Database Structure
-                The system appears to use the following data structure:
                 | Entity / Table | Inferred Fields | Purpose |
                 |---|---|---|
                 | [Name] | [Fields] | [Description] |
