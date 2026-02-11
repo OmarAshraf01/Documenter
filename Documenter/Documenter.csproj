@@ -31,4 +31,23 @@
 		</EmbeddedResource>
 	</ItemGroup>
 
+	<ItemGroup>
+		<!--Exclude new modular project folders from being compiled in this project -->
+		<Compile Remove="ProjectDocumenter.Core\**" />
+		<Compile Remove="ProjectDocumenter.Models\**" />
+		<Compile Remove="ProjectDocumenter.Services\**" />
+		<Compile Remove="ProjectDocumenter.CLI\**" />
+		<Compile Remove="ProjectDocumenter.Tests\**" />
+		<EmbeddedResource Remove="ProjectDocumenter.Core\**" />
+		<EmbeddedResource Remove="ProjectDocumenter.Models\**" />
+		<EmbeddedResource Remove="ProjectDocumenter.Services\**" />
+		<EmbeddedResource Remove="ProjectDocumenter.CLI\**" />
+		<EmbeddedResource Remove="ProjectDocumenter.Tests\**" />
+		<None Remove="ProjectDocumenter.Core\**" />
+		<None Remove="ProjectDocumenter.Models\**" />
+		<None Remove="ProjectDocumenter.Services\**" />
+		<None Remove="ProjectDocumenter.CLI\**" />
+		<None Remove="ProjectDocumenter.Tests\**" />
+	</ItemGroup>
+
 </Project>

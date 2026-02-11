@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Documenter.csproj" />
+  <Project Path="ProjectDocumenter.Core\ProjectDocumenter.Core.csproj" />
+  <Project Path="ProjectDocumenter.Models\ProjectDocumenter.Models.csproj" />
+  <Project Path="ProjectDocumenter.Services\ProjectDocumenter.Services.csproj" />
+  <Project Path="ProjectDocumenter.CLI\ProjectDocumenter.CLI.csproj" />
+  <Project Path="ProjectDocumenter.Tests\ProjectDocumenter.Tests.csproj" />
+</Solution>
