@@ -41,6 +41,20 @@ namespace Documenter
 
             // Set initial button state
             UpdateUiMode();
+
+            // Add modern button hover effects
+            AddButtonHoverEffects();
+        }
+
+        private void AddButtonHoverEffects()
+        {
+            // Hover effect for Start button
+            btnStart.MouseEnter += (s, e) => btnStart.BackColor = Color.FromArgb(39, 174, 96);
+            btnStart.MouseLeave += (s, e) => btnStart.BackColor = Color.FromArgb(46, 204, 113);
+
+            // Hover effect for Browse button
+            btnBrowse.MouseEnter += (s, e) => btnBrowse.BackColor = Color.FromArgb(41, 128, 185);
+            btnBrowse.MouseLeave += (s, e) => btnBrowse.BackColor = Color.FromArgb(52, 152, 219);
         }
 
         private async void Form1_Load(object? sender, EventArgs e)
