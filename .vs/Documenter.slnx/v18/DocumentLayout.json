@@ -1,0 +1,165 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\dockerservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\dockerservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\pdfservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\pdfservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\htmlservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\htmlservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\realtimeview.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\realtimeview.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|e:\\programming\\csharp\\windows\\projectdocumenter\\documenter\\documenter\\gitservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{5030C2C9-D6FA-1EDC-3138-EE05B36AF24C}|Documenter\\Documenter.csproj|solutionrelative:documenter\\gitservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Form1.cs [Design]",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.cs",
+              "RelativeDocumentMoniker": "Documenter\\Form1.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.cs [Design]",
+              "RelativeToolTip": "Documenter\\Form1.cs [Design]",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-11T01:56:40.743Z",
+              "EditorCaption": " [Design]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Form1.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.cs",
+              "RelativeDocumentMoniker": "Documenter\\Form1.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.cs",
+              "RelativeToolTip": "Documenter\\Form1.cs",
+              "ViewState": "AgIAALAAAAAAAAAAAAAswFYBAAA4AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-06T18:52:29.942Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "PdfService.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\PdfService.cs",
+              "RelativeDocumentMoniker": "Documenter\\PdfService.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\PdfService.cs",
+              "RelativeToolTip": "Documenter\\PdfService.cs",
+              "ViewState": "AgIAADoAAAAAAAAAAAAwwGAAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-06T18:54:06.139Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "RealTimeView.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\RealTimeView.cs",
+              "RelativeDocumentMoniker": "Documenter\\RealTimeView.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\RealTimeView.cs",
+              "RelativeToolTip": "Documenter\\RealTimeView.cs",
+              "ViewState": "AgIAACIAAAAAAAAAAADwvy8AAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-22T21:12:56.389Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "DockerService.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\DockerService.cs",
+              "RelativeDocumentMoniker": "Documenter\\DockerService.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\DockerService.cs",
+              "RelativeToolTip": "Documenter\\DockerService.cs",
+              "ViewState": "AgIAAFIAAAAAAAAAAAAmwGAAAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-22T21:50:50.355Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Form1.Designer.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.Designer.cs",
+              "RelativeDocumentMoniker": "Documenter\\Form1.Designer.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Form1.Designer.cs",
+              "RelativeToolTip": "Documenter\\Form1.Designer.cs",
+              "ViewState": "AgIAAFgAAAAAAAAAAAAwwH4AAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-06T19:16:59.064Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Program.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Program.cs",
+              "RelativeDocumentMoniker": "Documenter\\Program.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\Program.cs",
+              "RelativeToolTip": "Documenter\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-06T18:54:13.306Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "GitService.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\GitService.cs",
+              "RelativeDocumentMoniker": "Documenter\\GitService.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\GitService.cs",
+              "RelativeToolTip": "Documenter\\GitService.cs",
+              "ViewState": "AgIAAAQAAAAAAAAAAAAkwBQAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-06T18:53:56.254Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "HtmlService.cs",
+              "DocumentMoniker": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\HtmlService.cs",
+              "RelativeDocumentMoniker": "Documenter\\HtmlService.cs",
+              "ToolTip": "E:\\Programming\\CSharp\\Windows\\ProjectDocumenter\\Documenter\\Documenter\\HtmlService.cs",
+              "RelativeToolTip": "Documenter\\HtmlService.cs",
+              "ViewState": "AgIAAEsAAAAAAAAAAADwv1kAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-17T11:34:40.558Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
