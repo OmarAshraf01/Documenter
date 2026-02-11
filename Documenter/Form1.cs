@@ -1,9 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using ProjectDocumenter.Core.Interfaces;
+using ProjectDocumenter.Models;
+using ProjectDocumenter.Models.Configuration;
+using ProjectDocumenter.Services.AI;
+using ProjectDocumenter.Services.Analysis;
+using ProjectDocumenter.Services.Caching;
+using ProjectDocumenter.Services.Export;
+using ProjectDocumenter.Services.Infrastructure;
+using ProjectDocumenter.Services.Orchestration;
+using ProjectDocumenter.Services.Rag;
+using ProjectDocumenter.Services.Repository;
+using System;
 using System.IO;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -11,45 +21,110 @@ namespace Documenter
 {
     public partial class Form1 : Form
     {
-        // Added "documentation" to ignored folders to prevent the tool from documenting its own output
-        private readonly string[] _ignoredFolders = { "node_modules", ".git", ".vs", "bin", "obj", "properties", "debug", "lib", "packages", "documentation" };
-        private readonly HashSet<string> _validExtensions = new() { ".cs", ".py", ".java", ".js", ".ts", ".cpp", ".sql", ".xml", ".config", ".html", ".css" };
+        private readonly ServiceProvider _serviceProvider;
+        private readonly DocumentationOrchestrator _orchestrator;
+        private readonly DockerManager _dockerManager;
+        private CancellationTokenSource? _cancellationTokenSource;
 
-        private string _selectedBasePath = string.Empty;
-        private string _currentLogFile = string.Empty;
-        private RealTimeView? _realTimeWindow;
+        private string _selectedFolder = string.Empty;
+        private bool _isProcessing = false;
 
         public Form1()
         {
             InitializeComponent();
 
-            // Clear existing events to avoid duplication if designer attached them
+            // Setup dependency injection
+            var services = new ServiceCollection();
+            ConfigureServices(services);
+            _serviceProvider = services.BuildServiceProvider();
+
+            // Get required services
+            _orchestrator = _serviceProvider.GetRequiredService<DocumentationOrchestrator>();
+            _dockerManager = _serviceProvider.GetRequiredService<DockerManager>();
+
+            // Clear and reattach events
             btnBrowse.Click -= BtnBrowse_Click;
             btnStart.Click -= BtnStart_Click;
-            txtUrl.TextChanged -= TxtUrl_TextChanged; // New Event
+            txtUrl.TextChanged -= TxtUrl_TextChanged;
             this.Load -= Form1_Load;
+            this.FormClosing -= Form1_FormClosing;
 
-            // Attach Events
             btnBrowse.Click += BtnBrowse_Click;
             btnStart.Click += BtnStart_Click;
-            txtUrl.TextChanged += TxtUrl_TextChanged; // New Event
+            txtUrl.TextChanged += TxtUrl_TextChanged;
             this.Load += Form1_Load;
+            this.FormClosing += Form1_FormClosing;
 
-            // Default path
-            _selectedBasePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            if (lblSelectedPath != null) lblSelectedPath.Text = _selectedBasePath;
-
-            // Set initial button state
-            UpdateUiMode();
+            // Default folder
+            _selectedFolder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            lblSelectedPath.Text = _selectedFolder;
 
             // Add modern button hover effects
             AddButtonHoverEffects();
         }
 
+        private void ConfigureServices(IServiceCollection services)
+        {
+            // Configuration
+            var settings = new AppSettings
+            {
+                AiProvider = new AiProviderSettings
+                {
+                    Type = "Ollama",
+                    Endpoint = "http://localhost:11435",
+                    Model = "qwen2.5-coder:1.5b",
+                    MaxConcurrentRequests = 3,
+                    TimeoutSeconds = 300
+                },
+                Performance = new PerformanceSettings
+                {
+                    MaxParallelFileAnalysis = 4,
+                    ChunkSizeBytes = 8192
+                },
+                Caching = new CachingSettings
+                {
+                    EnableCaching = true,
+                    CacheDirectory = ".cache"
+                }
+            };
+
+            // Logging
+            services.AddLogging(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Information);
+                builder.AddConsole();
+            });
+
+            // Core Services
+            services.AddSingleton(settings.AiProvider);
+            services.AddSingleton(settings.Caching);
+            services.AddSingleton<IAiProvider, OllamaProvider>();
+            services.AddSingleton<IRagService, EnhancedRagService>();
+            services.AddSingleton<ICacheService>(sp =>
+                new FileHashCache(
+                    settings.Caching.CacheDirectory,
+                    sp.GetRequiredService<ILogger<FileHashCache>>()));
+
+            services.AddSingleton<ICodeAnalyzer>(sp =>
+                new StreamingCodeAnalyzer(
+                    sp.GetRequiredService<IAiProvider>(),
+                    sp.GetRequiredService<IRagService>(),
+                    sp.GetRequiredService<ICacheService>(),
+                    sp.GetRequiredService<ILogger<StreamingCodeAnalyzer>>(),
+                    settings.Performance.MaxParallelFileAnalysis));
+
+            services.AddSingleton<IDocumentGenerator, PdfGenerator>();
+            services.AddSingleton<DockerManager>();
+            services.AddSingleton<DocumentationOrchestrator>();
+        }
+
         private void AddButtonHoverEffects()
         {
             // Hover effect for Start button
-            btnStart.MouseEnter += (s, e) => btnStart.BackColor = Color.FromArgb(39, 174, 96);
+            btnStart.MouseEnter += (s, e) => {
+                if (btnStart.Enabled)
+                    btnStart.BackColor = Color.FromArgb(39, 174, 96);
+            };
             btnStart.MouseLeave += (s, e) => btnStart.BackColor = Color.FromArgb(46, 204, 113);
 
             // Hover effect for Browse button
@@ -59,291 +134,250 @@ namespace Documenter
 
         private async void Form1_Load(object? sender, EventArgs e)
         {
-            if (lblStatus != null) lblStatus.Text = "Initializing Docker...";
+            UpdateStatus("Initializing Docker...");
             btnStart.Enabled = false;
+            progressBar1.Visible = true;
 
-            // Initialize Docker
-            string result = await Task.Run(() => DockerService.InitializeAsync(Log));
-            Log(result);
-
-            if (!result.Contains("❌"))
+            try
             {
+                var isDockerRunning = await _dockerManager.EnsureDockerRunningAsync();
+                if (!isDockerRunning)
+                {
+                    Log("❌ Docker is not running. Please start Docker Desktop.");
+                    UpdateStatus("Docker initialization failed");
+                    progressBar1.Visible = false;
+                    MessageBox.Show("Docker Desktop is not running. Please start Docker Desktop and restart the application.",
+                        "Docker Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Ensure Ollama container is running
+                await _dockerManager.EnsureContainerRunningAsync(
+                    "ai-server",
+                    "ollama/ollama",
+                    new[] { "run", "-d", "-v", "ollama:/root/.ollama", "-p", "11435:11434", "--name", "ai-server", "ollama/ollama" },
+                    default);
+
+                Log("✅ Docker and AI container ready");
+                UpdateStatus("Ready");
                 btnStart.Enabled = true;
-                if (lblStatus != null) lblStatus.Text = "Ready";
+                UpdateButtonText();
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Initialization error: {ex.Message}");
+                UpdateStatus("Initialization failed");
+                MessageBox.Show($"Failed to initialize: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                progressBar1.Visible = false;
             }
         }
 
-        // --- NEW: Handle UI changes based on URL text ---
         private void TxtUrl_TextChanged(object? sender, EventArgs e)
         {
-            UpdateUiMode();
+            UpdateButtonText();
         }
 
-        private void UpdateUiMode()
+        private void UpdateButtonText()
         {
-            if (string.IsNullOrWhiteSpace(txtUrl.Text))
+            var isGitMode = !string.IsNullOrWhiteSpace(txtUrl.Text);
+            btnStart.Text = isGitMode ? "🚀 Clone & Document" : "🚀 Generate Documentation";
+
+            if (lblStatus.Text == "Ready")
             {
-                // LOCAL FOLDER MODE
-                btnStart.Text = "📄 Document Folder";
-                if (lblStatus != null && lblStatus.Text == "Ready") lblStatus.Text = "Mode: Local Folder";
-            }
-            else
-            {
-                // GITHUB MODE
-                btnStart.Text = "⬇️ Generate from Web";
-                if (lblStatus != null && lblStatus.Text == "Ready") lblStatus.Text = "Mode: GitHub Clone";
+                UpdateStatus(isGitMode ? "Mode: GitHub Repository" : "Mode: Local Folder");
             }
         }
 
         private void BtnBrowse_Click(object? sender, EventArgs e)
         {
-            using (var fbd = new FolderBrowserDialog())
-            {
-                // If in local mode, encourage picking a specific source folder
-                if (string.IsNullOrWhiteSpace(txtUrl.Text))
-                {
-                    fbd.Description = "Select the SOURCE CODE folder to document";
-                    fbd.UseDescriptionForTitle = true;
-                }
-                else
-                {
-                    fbd.Description = "Select folder to SAVE the repository";
-                }
+            using var fbd = new FolderBrowserDialog();
+            var isGitMode = !string.IsNullOrWhiteSpace(txtUrl.Text);
 
-                if (fbd.ShowDialog() == DialogResult.OK)
-                {
-                    _selectedBasePath = fbd.SelectedPath;
-                    if (lblSelectedPath != null) lblSelectedPath.Text = _selectedBasePath;
-                }
+            if (isGitMode)
+            {
+                fbd.Description = "📁 Select folder to save the cloned repository and documentation";
+            }
+            else
+            {
+                fbd.Description = "📁 Select the SOURCE CODE folder you want to document";
+            }
+
+            fbd.UseDescriptionForTitle = true;
+            fbd.SelectedPath = _selectedFolder;
+
+            if (fbd.ShowDialog() == DialogResult.OK)
+            {
+                _selectedFolder = fbd.SelectedPath;
+                lblSelectedPath.Text = _selectedFolder;
             }
         }
 
         private async void BtnStart_Click(object? sender, EventArgs e)
         {
-            // --- 1. DETERMINE MODE & PATHS ---
-            string repoUrl = txtUrl.Text.Trim();
-            bool isGitMode = !string.IsNullOrWhiteSpace(repoUrl);
-
-            string projectName;
-            string projectRoot;
-            string codeFolder;
-
-            if (isGitMode)
+            if (_isProcessing)
             {
-                // GitHub Mode: Clone INTO the selected path
-                projectName = GetProjectNameFromUrl(repoUrl);
-                projectRoot = Path.Combine(_selectedBasePath, projectName);
-                codeFolder = Path.Combine(projectRoot, "SourceCode"); // We create a clean subfolder
-            }
-            else
-            {
-                // Local Mode: The selected path IS the project root
-                projectRoot = _selectedBasePath;
-                projectName = Path.GetFileName(_selectedBasePath);
-                codeFolder = _selectedBasePath; // Analyze the selected folder directly
+                // Cancel operation
+                _cancellationTokenSource?.Cancel();
+                return;
             }
 
-            // Standardize Output Paths
-            string docsFolder = Path.Combine(projectRoot, "Documentation");
-            string htmlPath = Path.Combine(docsFolder, "Documentation.html");
-            string pdfPath = Path.Combine(docsFolder, "Documentation.pdf");
-
-            // --- 2. START PROCESS ---
-            btnStart.Enabled = false;
-            btnBrowse.Enabled = false;
-            txtUrl.Enabled = false;
-
-            _realTimeWindow = new RealTimeView();
-            _realTimeWindow.Show();
+            var isGitMode = !string.IsNullOrWhiteSpace(txtUrl.Text);
 
             try
             {
-                Log("🚀 Initializing Background Tasks...");
-                Task browserDownloadTask = PdfService.PrepareBrowserAsync(Log);
+                _isProcessing = true;
+                _cancellationTokenSource = new CancellationTokenSource();
+                btnStart.Text = "⏹️ Cancel";
+                btnStart.BackColor = Color.FromArgb(231, 76, 60);
+                btnBrowse.Enabled = false;
+                txtUrl.Enabled = false;
+                progressBar1.Visible = true;
+                lstLog.Items.Clear();
 
-                // Create Docs Folder (if it doesn't exist)
-                Directory.CreateDirectory(docsFolder);
-                _currentLogFile = Path.Combine(docsFolder, "log.txt");
+                ISourceRepository repository;
+                string outputFolder;
 
-                // --- 3. HANDLE CLONING (Only if Git Mode) ---
                 if (isGitMode)
                 {
-                    // Safety check: Clean up previous runs only in Git Mode
-                    if (Directory.Exists(codeFolder)) GitService.DeleteDirectory(codeFolder);
-                    Directory.CreateDirectory(codeFolder);
+                    // GitHub Mode
+                    var repoUrl = txtUrl.Text.Trim();
+                    Log($"🌐 Cloning repository: {repoUrl}");
+                    UpdateStatus("Cloning repository...");
 
-                    Log($"⬇️ Cloning {projectName}...");
-                    await Task.Run(() => GitService.CloneRepository(repoUrl, codeFolder));
+                    var logger = _serviceProvider.GetRequiredService<ILogger<GitRepository>>();
+                    repository = new GitRepository(repoUrl, logger, shallowClone: true);
+
+                    var projectName = Path.GetFileName(repoUrl.TrimEnd('/').Replace(".git", ""));
+                    outputFolder = Path.Combine(_selectedFolder, projectName, "Documentation");
                 }
                 else
                 {
-                    Log($"📂 using Local Folder: {codeFolder}");
-                }
-
-                // --- 4. START ANALYSIS (Shared Logic) ---
-                Log("🧠 Indexing knowledge base...");
-                RagService.IndexProject(codeFolder);
-
-                var htmlBuilder = new HtmlService();
-                var summaryForAi = new StringBuilder();
-                var dbData = new StringBuilder();
-
-                // Get Files (Using logic to ignore binary/system folders)
-                var files = Directory.GetFiles(codeFolder, "*.*", SearchOption.AllDirectories)
-                                            .Where(IsCodeFile)
-                                            .OrderBy(f => f)
-                                            .ToList();
-
-                if (files.Count == 0)
-                {
-                    throw new Exception("No valid code files found in the selected directory!");
-                }
-
-                int total = files.Count;
-                Log("🌳 Generating Folder Structure...");
-
-                // Pass relative path logic so the tree looks nice
-                htmlBuilder.InjectProjectStructure(GenerateTreeRecursively(codeFolder, "", codeFolder));
-
-                if (progressBar1 != null) { progressBar1.Maximum = total; progressBar1.Value = 0; }
-
-                // --- AI LOOP ---
-                for (int i = 0; i < total; i++)
-                {
-                    string file = files[i];
-                    string name = Path.GetFileName(file);
-
-                    // Safety: Skip the documentation file we are currently writing to prevent loops
-                    if (file.Contains(docsFolder)) continue;
-
-                    string code = await File.ReadAllTextAsync(file);
-                    if (string.IsNullOrWhiteSpace(code)) continue;
-
-                    string msg = $"Analyzing ({i + 1}/{total}): {name}";
-                    Log(msg);
-                    if (lblStatus != null) lblStatus.Text = msg;
-                    if (progressBar1 != null) progressBar1.Value = i + 1;
-
-                    string context = RagService.GetContext(code);
-                    string analysis = await AiAgent.AnalyzeCode(name, code, context);
-                    htmlBuilder.AddMarkdown(analysis);
-                    _realTimeWindow.AppendLog(name, analysis);
-
-                    // Build summaries for README generation
-                    string snippet = string.Join("\n", code.Split('\n').Take(30));
-                    summaryForAi.AppendLine($"File: {name}\nType: {Path.GetExtension(name)}\n{snippet}\n");
-
-                    // Heuristic for Database detection
-                    string lower = name.ToLower();
-                    if (lower.Contains("dal") || lower.Contains("model") || lower.Contains("entity") ||
-                        lower.Contains("dto") || code.Contains("CREATE TABLE") ||
-                        code.Contains("DbContext") || code.Contains("DbSet") || code.Contains("INSERT INTO"))
+                    // Local Mode
+                    if (!Directory.Exists(_selectedFolder))
                     {
-                        dbData.AppendLine($"--- {name} ---\n{code}\n");
+                        MessageBox.Show("Selected folder does not exist. Please select a valid folder.",
+                            "Invalid Folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
                     }
+
+                    Log($"📁 Analyzing local folder: {_selectedFolder}");
+                    UpdateStatus("Analyzing folder...");
+
+                    var logger = _serviceProvider.GetRequiredService<ILogger<LocalFolderRepository>>();
+                    repository = new LocalFolderRepository(_selectedFolder, logger);
+
+                    var projectName = new DirectoryInfo(_selectedFolder).Name;
+                    outputFolder = Path.Combine(_selectedFolder, "Documentation");
                 }
 
-                // Database Analysis
-                if (dbData.Length > 50)
+                // Generate documentation with progress reporting
+                var progress = new Progress<AnalysisProgress>(p =>
                 {
-                    Log("🗄️ Analyzing Database Structure...");
-                    string dbAnalysis = await AiAgent.AnalyzeDatabaseLogic(dbData.ToString());
-                    if (!string.IsNullOrWhiteSpace(dbAnalysis) && !dbAnalysis.Contains("N/A"))
+                    if (InvokeRequired)
                     {
-                        htmlBuilder.InjectDatabaseAnalysis(dbAnalysis);
-                        _realTimeWindow.AppendLog("DATABASE ANALYSIS", dbAnalysis);
+                        Invoke(() => UpdateProgress(p));
                     }
-                }
+                    else
+                    {
+                        UpdateProgress(p);
+                    }
+                });
 
-                // README Generation
-                Log("📘 Generating README...");
-                // If local, we don't have a repo URL, pass "Local Project" instead
-                string urlForReadme = isGitMode ? repoUrl : "Local Project";
-                string readme = await AiAgent.GenerateReadme(summaryForAi.ToString(), urlForReadme);
-                htmlBuilder.InjectReadme(readme);
-                _realTimeWindow.AppendLog("README", readme);
+                UpdateStatus("Generating documentation...");
+                var pdfPath = await _orchestrator.GenerateDocumentationAsync(
+                    outputFolder,
+                    progress,
+                    _cancellationTokenSource.Token);
 
-                // PDF Generation
-                Log("📄 Rendering PDF...");
-                string html = htmlBuilder.GetHtml();
-                await File.WriteAllTextAsync(htmlPath, html);
+                // Success
+                Log($"✅ Documentation generated successfully!");
+                Log($"📄 PDF: {pdfPath}");
+                UpdateStatus("Completed successfully");
+                progressBar1.Visible = false;
 
-                if (!browserDownloadTask.IsCompleted)
+                var result = MessageBox.Show(
+                    $"Documentation generated successfully!\n\nLocation: {pdfPath}\n\nWould you like to open the documentation folder?",
+                    "Success",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
+
+                if (result == DialogResult.Yes)
                 {
-                    Log("⏳ Waiting for browser download to finish...");
+                    System.Diagnostics.Process.Start("explorer.exe", outputFolder);
                 }
-                await browserDownloadTask;
-
-                await PdfService.ConvertHtmlToPdf(html, pdfPath);
-
-                Log("🚀 Done!");
-                if (lblStatus != null) lblStatus.Text = "Complete!";
-                _realTimeWindow.AppendLog("SYSTEM", $"🎉 Generation Complete. Saved to: {docsFolder}");
-
-                Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
+            }
+            catch (OperationCanceledException)
+            {
+                Log("⚠️ Operation cancelled by user");
+                UpdateStatus("Cancelled");
+                progressBar1.Visible = false;
             }
             catch (Exception ex)
             {
                 Log($"❌ Error: {ex.Message}");
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UpdateStatus("Failed");
+                progressBar1.Visible = false;
+                MessageBox.Show($"An error occurred:\n\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                btnStart.Enabled = true;
+                _isProcessing = false;
+                btnStart.Text = isGitMode ? "🚀 Clone & Document" : "🚀 Generate Documentation";
+                btnStart.BackColor = Color.FromArgb(46, 204, 113);
                 btnBrowse.Enabled = true;
                 txtUrl.Enabled = true;
+                _cancellationTokenSource?.Dispose();
+                _cancellationTokenSource = null;
             }
         }
 
-        // Updated Tree Generation to handle relative paths better
-        private string GenerateTreeRecursively(string currentDir, string indent, string rootDir)
+        private void UpdateProgress(AnalysisProgress progress)
         {
-            StringBuilder sb = new StringBuilder();
-            try
+            var message = $"⚙️  [{progress.CurrentPhase}] {progress.CurrentFile} ({progress.ProcessedFiles}/{progress.TotalFiles})";
+            Log(message);
+            UpdateStatus($"{progress.CurrentPhase}: {progress.ProcessedFiles}/{progress.TotalFiles} files");
+        }
+
+        private void Log(string message)
+        {
+            if (InvokeRequired)
             {
-                var directories = Directory.GetDirectories(currentDir)
-                    .Where(d => !_ignoredFolders.Contains(Path.GetFileName(d).ToLower()));
-
-                foreach (var d in directories)
-                {
-                    sb.AppendLine($"{indent}📁 {Path.GetFileName(d)}/");
-                    sb.Append(GenerateTreeRecursively(d, indent + "    ", rootDir));
-                }
-
-                var files = Directory.GetFiles(currentDir).Where(IsCodeFile);
-                foreach (var f in files)
-                {
-                    sb.AppendLine($"{indent}📄 {Path.GetFileName(f)}");
-                }
+                Invoke(() => Log(message));
+                return;
             }
-            catch { }
-            return sb.ToString();
+
+            lstLog.Items.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
+            lstLog.TopIndex = lstLog.Items.Count - 1; // Auto-scroll
         }
 
-        private bool IsCodeFile(string path)
+        private void UpdateStatus(string status)
         {
-            string ext = Path.GetExtension(path).ToLower();
-            if (!_validExtensions.Contains(ext)) return false;
-            foreach (var bad in _ignoredFolders)
-                if (path.ToLower().Contains(Path.DirectorySeparatorChar + bad + Path.DirectorySeparatorChar)) return false;
-            return true;
-        }
-
-        private void Log(string msg)
-        {
-            if (lstLog.InvokeRequired) lstLog.Invoke(new Action<string>(Log), msg);
-            else
+            if (InvokeRequired)
             {
-                lstLog.Items.Add($"{DateTime.Now:HH:mm:ss}: {msg}");
-                lstLog.TopIndex = lstLog.Items.Count - 1;
-                try { if (!string.IsNullOrEmpty(_currentLogFile)) File.AppendAllText(_currentLogFile, msg + "\n"); } catch { }
+                Invoke(() => UpdateStatus(status));
+                return;
             }
+
+            lblStatus.Text = status;
         }
 
-        private string GetProjectNameFromUrl(string url)
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            try { return new Uri(url).Segments.Last().Trim('/').Replace(".git", ""); }
-            catch { return "ProjectDocs"; }
+            _cancellationTokenSource?.Cancel();
+            _serviceProvider?.Dispose();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _cancellationTokenSource?.Dispose();
+                _serviceProvider?.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }

@@ -118,7 +118,8 @@
               "RelativeToolTip": "Documenter\\Form1.Designer.cs",
               "ViewState": "AgIAAFgAAAAAAAAAAAAwwH4AAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-06T19:16:59.064Z"
+              "WhenOpened": "2026-01-06T19:16:59.064Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -142,8 +143,7 @@
               "RelativeToolTip": "Documenter\\GitService.cs",
               "ViewState": "AgIAAAQAAAAAAAAAAAAkwBQAAAAiAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-06T18:53:56.254Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-01-06T18:53:56.254Z"
             },
             {
               "$type": "Document",
